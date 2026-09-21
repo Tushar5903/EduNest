@@ -1,0 +1,5 @@
+$kind: http-request
+description: One-school counts + admin profile. Uses `{{instituteId}}`. Verifies no PII leak.
+url: "{{baseUrl}}/super/institutes/{{instituteId}}"
+method: GET
+order: 4000

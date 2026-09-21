@@ -1,0 +1,14 @@
+$kind: http-request
+description: "Default action: only admin suspended (status=suspended). Teachers/students keep logging in + portal shows 'Admin suspended' banner. Body `{ action, reason (min 3 chars, audited) }`."
+url: "{{baseUrl}}/super/institutes/{{instituteId}}/status"
+method: PATCH
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "action": "block-admin",
+      "reason": "Demo block — fee records pending verification"
+    }
+order: 5000

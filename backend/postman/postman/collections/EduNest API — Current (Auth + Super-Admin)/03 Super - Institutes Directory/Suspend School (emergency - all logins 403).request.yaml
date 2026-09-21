@@ -1,0 +1,14 @@
+$kind: http-request
+description: "Emergency only: `Institute.status=suspended` → EVERY login for that institute (admin/teacher/student) → 403 'School suspended'. Confirm explicitly before running on real data."
+url: "{{baseUrl}}/super/institutes/{{instituteId}}/status"
+method: PATCH
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "action": "suspend-school",
+      "reason": "Demo suspend — emergency drill only"
+    }
+order: 7000

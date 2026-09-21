@@ -1,0 +1,27 @@
+$kind: http-request
+description: "Public. Creates Institute(status=pending) + User(admin,status=pending). Returns `{ instituteId, status: 'pending' }`. Test script saves `instituteId`. Re-run with a fresh email (duplicate email → 409)."
+url: "{{baseUrl}}/auth/admin-request"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "name": "Demo Admin One",
+      "email": "demo.admin1@sunrise-school.in",
+      "password": "Demo@1234",
+      "schoolName": "Sunrise Public School",
+      "address": "MG Road, Pune",
+      "phone": "9876543210"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      const json = pm.response.json();
+      if (json.ok && json.data && json.data.instituteId) {
+          pm.collectionVariables.set('instituteId', json.data.instituteId);
+          console.log('Saved instituteId:', json.data.instituteId);
+      }
+    language: text/javascript
+order: 1000

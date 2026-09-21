@@ -1,0 +1,30 @@
+$kind: http-request
+description: Super-admin creates ACTIVE institute + admin directly (no approval). Returns `{ instituteId, adminEmail, tempPassword }` — tempPassword shown ONCE. Test script saves `instituteId` + `tempPassword`. Duplicate adminEmail → 409.
+url: "{{baseUrl}}/super/institutes"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "schoolName": "Greenwood Academy",
+      "address": "Park Street, Kolkata",
+      "phone": "9123456780",
+      "adminName": "Offline Admin",
+      "adminEmail": "offline.admin@greenwood-academy.in"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      const json = pm.response.json();
+      if (json.ok && json.data && json.data.instituteId) {
+          pm.collectionVariables.set('instituteId', json.data.instituteId);
+          console.log('Saved instituteId:', json.data.instituteId);
+      }
+      if (json.ok && json.data && json.data.tempPassword) {
+          pm.collectionVariables.set('tempPassword', json.data.tempPassword);
+          console.log('Saved tempPassword (copy now, shown once):', json.data.tempPassword);
+      }
+    language: text/javascript
+order: 1000

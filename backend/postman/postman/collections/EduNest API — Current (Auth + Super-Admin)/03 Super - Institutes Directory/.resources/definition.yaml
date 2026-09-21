@@ -1,0 +1,3 @@
+$kind: collection
+description: Counts-only directory — never returns student/teacher PII, marks, fee rows, or complaint bodies.
+order: 4000

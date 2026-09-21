@@ -1,0 +1,45 @@
+$kind: collection
+description: |-
+  # EduNest API — Manual Testing Collection
+
+  Covers **all currently implemented routes** (`backend/src/app.ts`):
+
+  - `GET /api/health`
+  - `POST /api/auth/admin-request`, `/api/auth/login`, `/api/auth/refresh`, `/api/auth/logout`, `GET /api/auth/me`
+  - `GET /api/super/requests`, `POST /api/super/requests/:id/approve`, `POST /api/super/requests/:id/reject`
+  - `POST /api/super/institutes`, `GET /api/super/institutes`, `GET /api/super/institutes/:id`, `PATCH /api/super/institutes/:id/status`
+
+  > NOTE: Admin / Teacher / Student / Classes / Timetable / Attendance / Tests / Fees / Salary / Notices / Complaints / Reports routes from `backendplan.md` are **NOT implemented yet** — so they are intentionally NOT in this collection.
+
+  ## Setup (2 min)
+
+  1. Start backend: `cd backend` then `npm run dev` (expects `PORT=4000`, MongoDB running, `backend/.env` filled — see `backend/.env.example`).
+  2. Import this file into Postman: **Import → File → EduNest.postman_collection.json**.
+  3. Select collection → **Variables** tab → set:
+     - `baseUrl` = `http://localhost:4000/api`
+     - `superEmail` = your `SUPER_EMAIL` from `backend/.env` (default in `.env.example` is `super@edunest.in`)
+     - `superPassword` = your `SUPER_PASSWORD` (default in `.env.example` is `Super@123`)
+  4. Cookies: Postman saves `edunest_token` + `edunest_refresh` (httpOnly) automatically. Keep **Cookie Jar enabled** (Postman does this by default). Login once, then all `Super` + `Me` requests work.
+  5. Follow the **suggested order** below (folder order = workflow order).
+
+  ## Suggested manual flow
+
+  1. `Health` → should be `{ ok: true, data: { service, db, time } }`.
+  2. `Auth / 01 + 02 Admin Request` → creates 2 pending schools. Test scripts auto-save `instituteId` and `rejectInstituteId`.
+  3. `Auth / 04 Login Super-Admin` → sets cookies (also returns `{ user }`).
+  4. `Super Requests / List Pending` → see your 2 new rows, copy `instituteId` if needed.
+  5. `Super Requests / Approve` → approves `{{instituteId}}`.
+  6. `Super Institutes / Direct Create` → offline onboarding, auto-saves new `{{instituteId}}` + `tempPassword` (returned ONCE).
+  7. `Super Institutes / Directory + Detail + Status` → block/unblock/suspend/unsuspend cycle.
+  8. `Auth / Me, Refresh, Logout` → session checks.
+
+  All success bodies use envelope `{ ok: true, data: ... }`. Errors use `{ ok: false, error, details? }` with `400/401/403/404/409/429`.
+variables:
+  baseUrl: http://localhost:4000/api
+  superEmail: super@edunest.in
+  superPassword: Super@123
+  instituteId: ""
+  rejectInstituteId: ""
+  adminEmail: demo.admin1@sunrise-school.in
+  adminPassword: Demo@1234
+  tempPassword: ""

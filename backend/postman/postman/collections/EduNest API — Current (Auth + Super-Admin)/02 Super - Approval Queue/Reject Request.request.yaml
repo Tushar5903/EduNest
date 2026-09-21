@@ -1,0 +1,13 @@
+$kind: http-request
+description: Body `{ reason (min 3 chars) }`. Only pending can be rejected. Already-approved → 400 'use block-admin instead'. Uses `{{rejectInstituteId}}` auto-saved from Auth/02.
+url: "{{baseUrl}}/super/requests/{{rejectInstituteId}}/reject"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "reason": "Demo rejection — incomplete school address proof"
+    }
+order: 5000

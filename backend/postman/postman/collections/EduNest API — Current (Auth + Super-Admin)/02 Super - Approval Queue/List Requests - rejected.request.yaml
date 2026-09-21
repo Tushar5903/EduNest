@@ -1,0 +1,7 @@
+$kind: http-request
+description: "Rejected queue. Note: rejected = institute stays pending + admin=rejected (record preserved), filtered on admin row."
+url: "{{baseUrl}}/super/requests?status=rejected"
+method: GET
+queryParams:
+  status: rejected
+order: 3000

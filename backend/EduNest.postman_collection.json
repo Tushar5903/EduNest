@@ -1,0 +1,811 @@
+{
+	"info": {
+		"_postman_id": "edunest-api-collection-v1",
+		"name": "EduNest API — Current (Auth + Super-Admin)",
+		"description": "# EduNest API — Manual Testing Collection\n\nCovers **all currently implemented routes** (`backend/src/app.ts`):\n\n- `GET /api/health`\n- `POST /api/auth/admin-request`, `/api/auth/login`, `/api/auth/refresh`, `/api/auth/logout`, `GET /api/auth/me`\n- `GET /api/super/requests`, `POST /api/super/requests/:id/approve`, `POST /api/super/requests/:id/reject`\n- `POST /api/super/institutes`, `GET /api/super/institutes`, `GET /api/super/institutes/:id`, `PATCH /api/super/institutes/:id/status`\n\n> NOTE: Admin / Teacher / Student / Classes / Timetable / Attendance / Tests / Fees / Salary / Notices / Complaints / Reports routes from `backendplan.md` are **NOT implemented yet** — so they are intentionally NOT in this collection.\n\n## Setup (2 min)\n\n1. Start backend: `cd backend` then `npm run dev` (expects `PORT=4000`, MongoDB running, `backend/.env` filled — see `backend/.env.example`).\n2. Import this file into Postman: **Import → File → EduNest.postman_collection.json**.\n3. Select collection → **Variables** tab → set:\n   - `baseUrl` = `http://localhost:4000/api`\n   - `superEmail` = your `SUPER_EMAIL` from `backend/.env` (default in `.env.example` is `super@edunest.in`)\n   - `superPassword` = your `SUPER_PASSWORD` (default in `.env.example` is `Super@123`)\n4. Cookies: Postman saves `edunest_token` + `edunest_refresh` (httpOnly) automatically. Keep **Cookie Jar enabled** (Postman does this by default). Login once, then all `Super` + `Me` requests work.\n5. Follow the **suggested order** below (folder order = workflow order).\n\n## Suggested manual flow\n\n1. `Health` → should be `{ ok: true, data: { service, db, time } }`.\n2. `Auth / 01 + 02 Admin Request` → creates 2 pending schools. Test scripts auto-save `instituteId` and `rejectInstituteId`.\n3. `Auth / 04 Login Super-Admin` → sets cookies (also returns `{ user }`).\n4. `Super Requests / List Pending` → see your 2 new rows, copy `instituteId` if needed.\n5. `Super Requests / Approve` → approves `{{instituteId}}`.\n6. `Super Institutes / Direct Create` → offline onboarding, auto-saves new `{{instituteId}}` + `tempPassword` (returned ONCE).\n7. `Super Institutes / Directory + Detail + Status` → block/unblock/suspend/unsuspend cycle.\n8. `Auth / Me, Refresh, Logout` → session checks.\n\nAll success bodies use envelope `{ ok: true, data: ... }`. Errors use `{ ok: false, error, details? }` with `400/401/403/404/409/429`.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:4000/api",
+			"type": "string",
+			"description": "Backend base URL (no trailing slash). Change if PORT differs."
+		},
+		{
+			"key": "superEmail",
+			"value": "super@edunest.in",
+			"type": "string",
+			"description": "Must match SUPER_EMAIL in backend/.env"
+		},
+		{
+			"key": "superPassword",
+			"value": "Super@123",
+			"type": "string",
+			"description": "Must match SUPER_PASSWORD in backend/.env — keep secret, do not commit real value"
+		},
+		{
+			"key": "instituteId",
+			"value": "",
+			"type": "string",
+			"description": "Auto-saved by Admin-Request-01 / Direct-Create test scripts. Used by approve + institute detail/status."
+		},
+		{
+			"key": "rejectInstituteId",
+			"value": "",
+			"type": "string",
+			"description": "Auto-saved by Admin-Request-02 test script. Used by reject request."
+		},
+		{
+			"key": "adminEmail",
+			"value": "demo.admin1@sunrise-school.in",
+			"type": "string",
+			"description": "Demo admin email for approve flow"
+		},
+		{
+			"key": "adminPassword",
+			"value": "Demo@1234",
+			"type": "string",
+			"description": "Demo admin password (min 8 chars)"
+		},
+		{
+			"key": "tempPassword",
+			"value": "",
+			"type": "string",
+			"description": "Auto-saved by Direct-Create response (returned ONCE)"
+		}
+	],
+	"item": [
+		{
+			"name": "00 Health",
+			"item": [
+				{
+					"name": "GET Health",
+					"request": {
+						"description": "Public liveness probe. No auth. Expect `{ ok: true, data: { service: 'edunest-api', db, time } }`.",
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/health",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"health"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "01 Auth",
+			"description": "Run in order 01 → 09. Login as super-admin once; cookies auth the rest.",
+			"item": [
+				{
+					"name": "01 Admin Request - Approve Flow (Sunrise School)",
+					"request": {
+						"description": "Public. Creates Institute(status=pending) + User(admin,status=pending). Returns `{ instituteId, status: 'pending' }`. Test script saves `instituteId`. Re-run with a fresh email (duplicate email → 409).",
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Demo Admin One\",\n  \"email\": \"demo.admin1@sunrise-school.in\",\n  \"password\": \"Demo@1234\",\n  \"schoolName\": \"Sunrise Public School\",\n  \"address\": \"MG Road, Pune\",\n  \"phone\": \"9876543210\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/admin-request",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"admin-request"
+							]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"const json = pm.response.json();",
+									"if (json.ok && json.data && json.data.instituteId) {",
+									"    pm.collectionVariables.set('instituteId', json.data.instituteId);",
+									"    console.log('Saved instituteId:', json.data.instituteId);",
+									"}"
+								]
+							}
+						}
+					],
+					"response": []
+				},
+				{
+					"name": "02 Admin Request - Reject Flow (Lakeview School)",
+					"request": {
+						"description": "Second pending school, used to demo the REJECT flow. Test script saves `rejectInstituteId`.",
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Demo Admin Two\",\n  \"email\": \"reject.admin@lakeview-school.in\",\n  \"password\": \"Demo@1234\",\n  \"schoolName\": \"Lakeview International School\",\n  \"address\": \"Lake Road, Udaipur\",\n  \"phone\": \"9812345678\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/admin-request",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"admin-request"
+							]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"const json = pm.response.json();",
+									"if (json.ok && json.data && json.data.instituteId) {",
+									"    pm.collectionVariables.set('rejectInstituteId', json.data.instituteId);",
+									"    console.log('Saved rejectInstituteId:', json.data.instituteId);",
+									"}"
+								]
+							}
+						}
+					],
+					"response": []
+				},
+				{
+					"name": "03 Admin Request - Validation Error (expect 400)",
+					"request": {
+						"description": "Negative test: bad email + short password + missing schoolName → 400 with zod details. Proves validator wiring.",
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"X\",\n  \"email\": \"not-an-email\",\n  \"password\": \"short\",\n  \"schoolName\": \"\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/admin-request",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"admin-request"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "04 Login - Super Admin (sets cookies)",
+					"request": {
+						"description": "Public (rate-limited: 10/min portal, 5/min console via X-Client). Body identifier = email OR loginId. Sets httpOnly cookies `edunest_token` (15min) + `edunest_refresh` (7d). Update `superEmail/superPassword` collection variables from your backend/.env first.",
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-Client",
+								"value": "console",
+								"description": "console = stricter 5/min limiter; portal = 10/min"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"identifier\": \"{{superEmail}}\",\n  \"password\": \"{{superPassword}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"login"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "05 Login - Pending Admin (expect 403)",
+					"request": {
+						"description": "Negative test: admin from request 01/02 logs in BEFORE approval → 403 'Account pending approval'. After approval this same body returns 200.",
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-Client",
+								"value": "console"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"identifier\": \"demo.admin1@sunrise-school.in\",\n  \"password\": \"Demo@1234\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"login"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "06 Login - Wrong Password (expect 401)",
+					"request": {
+						"description": "Negative test: valid identifier + wrong password → 401 'Invalid credentials' (generic, no user enumeration).",
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-Client",
+								"value": "console"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"identifier\": \"{{superEmail}}\",\n  \"password\": \"WrongPassword123!\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"login"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "07 Get Session (me)",
+					"request": {
+						"description": "Auth required (cookie). Returns `{ user, banner: { adminSuspended, instituteStatus } }`. Super-admin gets `instituteStatus: 'none'`. No status gate here by design so frontends can render pending/suspended banners.",
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/auth/me",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"me"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "08 Refresh Session",
+					"request": {
+						"description": "Auth via refresh cookie. Reads `edunest_refresh`, rotates it, re-sets both cookies, returns `{ user }`. Old refresh token is invalidated (reuse → 401). Works even if access token expired.",
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/auth/refresh",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"refresh"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "09 Logout (run last in Auth)",
+					"request": {
+						"description": "Clears both cookies + revokes stored refresh hash server-side. Run LAST — after this, Super requests return 401 until you re-login (04).",
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/auth/logout",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"logout"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "02 Super - Approval Queue",
+			"description": "All require super-admin cookie (login 04 first). `protect → allowRoles(super-admin) → checkStatus`.",
+			"item": [
+				{
+					"name": "List Requests - pending",
+					"request": {
+						"description": "Default queue view. `GET /api/super/requests?status=pending`. Shows institute + requesting admin profile only — no student/teacher data.",
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/super/requests?status=pending",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"super",
+								"requests"
+							],
+							"query": [
+								{
+									"key": "status",
+									"value": "pending"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List Requests - active",
+					"request": {
+						"description": "Already-approved queue. `?status=active`. After approving, your Sunrise row moves here.",
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/super/requests?status=active",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"super",
+								"requests"
+							],
+							"query": [
+								{
+									"key": "status",
+									"value": "active"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List Requests - rejected",
+					"request": {
+						"description": "Rejected queue. Note: rejected = institute stays pending + admin=rejected (record preserved), filtered on admin row.",
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/super/requests?status=rejected",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"super",
+								"requests"
+							],
+							"query": [
+								{
+									"key": "status",
+									"value": "rejected"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Approve Request",
+					"request": {
+						"description": "Sets Institute=active + Admin=active, writes AuditLog. Idempotent (re-approve → same 200). Uses `{{instituteId}}` auto-saved from Auth/01. Replace `:id` with a real ObjectId from the pending list.",
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/super/requests/{{instituteId}}/approve",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"super",
+								"requests",
+								"{{instituteId}}",
+								"approve"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Reject Request",
+					"request": {
+						"description": "Body `{ reason (min 3 chars) }`. Only pending can be rejected. Already-approved → 400 'use block-admin instead'. Uses `{{rejectInstituteId}}` auto-saved from Auth/02.",
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"reason\": \"Demo rejection — incomplete school address proof\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/super/requests/{{rejectInstituteId}}/reject",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"super",
+								"requests",
+								"{{rejectInstituteId}}",
+								"reject"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Approve - Invalid ID (expect 400)",
+					"request": {
+						"description": "Negative test: malformed ObjectId → 400 'Invalid id format' (not 500). Unknown-but-valid ObjectId → 404.",
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/super/requests/not-a-valid-id/approve",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"super",
+								"requests",
+								"not-a-valid-id",
+								"approve"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "03 Super - Institutes Directory",
+			"description": "Counts-only directory — never returns student/teacher PII, marks, fee rows, or complaint bodies.",
+			"item": [
+				{
+					"name": "Direct Create Institute + Admin (offline onboarding)",
+					"request": {
+						"description": "Super-admin creates ACTIVE institute + admin directly (no approval). Returns `{ instituteId, adminEmail, tempPassword }` — tempPassword shown ONCE. Test script saves `instituteId` + `tempPassword`. Duplicate adminEmail → 409.",
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"schoolName\": \"Greenwood Academy\",\n  \"address\": \"Park Street, Kolkata\",\n  \"phone\": \"9123456780\",\n  \"adminName\": \"Offline Admin\",\n  \"adminEmail\": \"offline.admin@greenwood-academy.in\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/super/institutes",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"super",
+								"institutes"
+							]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"const json = pm.response.json();",
+									"if (json.ok && json.data && json.data.instituteId) {",
+									"    pm.collectionVariables.set('instituteId', json.data.instituteId);",
+									"    console.log('Saved instituteId:', json.data.instituteId);",
+									"}",
+									"if (json.ok && json.data && json.data.tempPassword) {",
+									"    pm.collectionVariables.set('tempPassword', json.data.tempPassword);",
+									"    console.log('Saved tempPassword (copy now, shown once):', json.data.tempPassword);",
+									"}"
+								]
+							}
+						}
+					],
+					"response": []
+				},
+				{
+					"name": "List Institutes (all)",
+					"request": {
+						"description": "Directory rows: `school, code, admin(name/email), #students, #teachers, #classes, feesCollected%, complaintCounts, status, createdAt`. Aggregations only.",
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/super/institutes",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"super",
+								"institutes"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List Institutes - search + status filter",
+					"request": {
+						"description": "Demo of `?search` (matches name/code, regex-safe) + `?status=active`. Try status=pending|suspended, search=GREENWOOD. Invalid status → 400.",
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/super/institutes?search=greenwood&status=active",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"super",
+								"institutes"
+							],
+							"query": [
+								{
+									"key": "search",
+									"value": "greenwood"
+								},
+								{
+									"key": "status",
+									"value": "active"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Institute by ID (counts only)",
+					"request": {
+						"description": "One-school counts + admin profile. Uses `{{instituteId}}`. Verifies no PII leak.",
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/super/institutes/{{instituteId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"super",
+								"institutes",
+								"{{instituteId}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Block Admin (school keeps running)",
+					"request": {
+						"description": "Default action: only admin suspended (status=suspended). Teachers/students keep logging in + portal shows 'Admin suspended' banner. Body `{ action, reason (min 3 chars, audited) }`.",
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"action\": \"block-admin\",\n  \"reason\": \"Demo block — fee records pending verification\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/super/institutes/{{instituteId}}/status",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"super",
+								"institutes",
+								"{{instituteId}}",
+								"status"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Unblock Admin",
+					"request": {
+						"description": "Restores admin instantly. Same endpoint, `action: unblock-admin`.",
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"action\": \"unblock-admin\",\n  \"reason\": \"Demo unblock — verification complete\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/super/institutes/{{instituteId}}/status",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"super",
+								"institutes",
+								"{{instituteId}}",
+								"status"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Suspend School (emergency - all logins 403)",
+					"request": {
+						"description": "Emergency only: `Institute.status=suspended` → EVERY login for that institute (admin/teacher/student) → 403 'School suspended'. Confirm explicitly before running on real data.",
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"action\": \"suspend-school\",\n  \"reason\": \"Demo suspend — emergency drill only\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/super/institutes/{{instituteId}}/status",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"super",
+								"institutes",
+								"{{instituteId}}",
+								"status"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Unsuspend School",
+					"request": {
+						"description": "Restores institute instantly. Run after Suspend School to leave demo data clean.",
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"action\": \"unsuspend-school\",\n  \"reason\": \"Demo unsuspend — drill complete\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/super/institutes/{{instituteId}}/status",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"super",
+								"institutes",
+								"{{instituteId}}",
+								"status"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}

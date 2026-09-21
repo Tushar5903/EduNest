@@ -1,0 +1,5 @@
+$kind: http-request
+description: "Public liveness probe. No auth. Expect `{ ok: true, data: { service: 'edunest-api', db, time } }`."
+url: "{{baseUrl}}/health"
+method: GET
+order: 1000

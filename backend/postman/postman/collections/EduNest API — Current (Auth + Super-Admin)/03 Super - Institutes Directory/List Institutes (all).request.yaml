@@ -1,0 +1,5 @@
+$kind: http-request
+description: "Directory rows: `school, code, admin(name/email), #students, #teachers, #classes, feesCollected%, complaintCounts, status, createdAt`. Aggregations only."
+url: "{{baseUrl}}/super/institutes"
+method: GET
+order: 2000

@@ -1,0 +1,3 @@
+$kind: collection
+description: All require super-admin cookie (login 04 first). `protect → allowRoles(super-admin) → checkStatus`.
+order: 3000
