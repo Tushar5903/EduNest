@@ -16,3 +16,19 @@ export function validateBody<T>(schema: ZodSchema<T>) {
     }
   };
 }
+
+/** Validates req.query against a Zod schema. 400 with field details on failure. */
+export function validateQuery<T>(schema: ZodSchema<T>) {
+  return (req: Request, _res: Response, next: NextFunction): void => {
+    try {
+      req.query = schema.parse(req.query) as Request["query"];
+      next();
+    } catch (err) {
+      if (err instanceof ZodError) {
+        next({ status: 400, message: "Validation failed", details: err.flatten().fieldErrors });
+        return;
+      }
+      next(err);
+    }
+  };
+}

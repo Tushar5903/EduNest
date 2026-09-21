@@ -9,6 +9,8 @@ import { databaseState } from "./config/database.js";
 import { errorHandler, notFound } from "./middleware/error.middleware.js";
 import authRoutes from "./routes/auth.routes.js";
 import superRoutes from "./routes/super.routes.js";
+import adminRoutes from "./routes/admin.routes.js";
+import classRoutes from "./routes/class.routes.js";
 
 export function createApp() {
   const app = express();
@@ -26,6 +28,8 @@ export function createApp() {
   // Phase 4+ routers mount here (admin, teacher, student, ...).
   app.use("/api/auth", authRoutes);
   app.use("/api/super", superRoutes);
+  app.use("/api/admin", adminRoutes);
+  app.use("/api/classes", classRoutes);
 
   app.use("/api", notFound);
   app.use(errorHandler);

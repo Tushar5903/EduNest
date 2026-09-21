@@ -1,7 +1,7 @@
 {
 	"info": {
 		"_postman_id": "edunest-api-collection-v1",
-		"name": "EduNest API — Current (Auth + Super-Admin)",
+		"name": "EduNest API — Auth + Super-Admin + Provision (Phase 4)",
 		"description": "# EduNest API — Manual Testing Collection\n\nCovers **all currently implemented routes** (`backend/src/app.ts`):\n\n- `GET /api/health`\n- `POST /api/auth/admin-request`, `/api/auth/login`, `/api/auth/refresh`, `/api/auth/logout`, `GET /api/auth/me`\n- `GET /api/super/requests`, `POST /api/super/requests/:id/approve`, `POST /api/super/requests/:id/reject`\n- `POST /api/super/institutes`, `GET /api/super/institutes`, `GET /api/super/institutes/:id`, `PATCH /api/super/institutes/:id/status`\n\n> NOTE: Admin / Teacher / Student / Classes / Timetable / Attendance / Tests / Fees / Salary / Notices / Complaints / Reports routes from `backendplan.md` are **NOT implemented yet** — so they are intentionally NOT in this collection.\n\n## Setup (2 min)\n\n1. Start backend: `cd backend` then `npm run dev` (expects `PORT=4000`, MongoDB running, `backend/.env` filled — see `backend/.env.example`).\n2. Import this file into Postman: **Import → File → EduNest.postman_collection.json**.\n3. Select collection → **Variables** tab → set:\n   - `baseUrl` = `http://localhost:4000/api`\n   - `superEmail` = your `SUPER_EMAIL` from `backend/.env` (default in `.env.example` is `super@edunest.in`)\n   - `superPassword` = your `SUPER_PASSWORD` (default in `.env.example` is `Super@123`)\n4. Cookies: Postman saves `edunest_token` + `edunest_refresh` (httpOnly) automatically. Keep **Cookie Jar enabled** (Postman does this by default). Login once, then all `Super` + `Me` requests work.\n5. Follow the **suggested order** below (folder order = workflow order).\n\n## Suggested manual flow\n\n1. `Health` → should be `{ ok: true, data: { service, db, time } }`.\n2. `Auth / 01 + 02 Admin Request` → creates 2 pending schools. Test scripts auto-save `instituteId` and `rejectInstituteId`.\n3. `Auth / 04 Login Super-Admin` → sets cookies (also returns `{ user }`).\n4. `Super Requests / List Pending` → see your 2 new rows, copy `instituteId` if needed.\n5. `Super Requests / Approve` → approves `{{instituteId}}`.\n6. `Super Institutes / Direct Create` → offline onboarding, auto-saves new `{{instituteId}}` + `tempPassword` (returned ONCE).\n7. `Super Institutes / Directory + Detail + Status` → block/unblock/suspend/unsuspend cycle.\n8. `Auth / Me, Refresh, Logout` → session checks.\n\nAll success bodies use envelope `{ ok: true, data: ... }`. Errors use `{ ok: false, error, details? }` with `400/401/403/404/409/429`.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
@@ -53,6 +53,48 @@
 			"value": "",
 			"type": "string",
 			"description": "Auto-saved by Direct-Create response (returned ONCE)"
+		},
+		{
+			"key": "classId",
+			"value": "",
+			"type": "string",
+			"description": "Auto-saved by Classes / Create Class"
+		},
+		{
+			"key": "teacherId",
+			"value": "",
+			"type": "string",
+			"description": "Auto-saved by Teachers / Create Teacher"
+		},
+		{
+			"key": "teacherLoginId",
+			"value": "",
+			"type": "string",
+			"description": "Auto-saved T-XXXX login"
+		},
+		{
+			"key": "teacherTempPassword",
+			"value": "",
+			"type": "string",
+			"description": "One-time temp credential (copy immediately)"
+		},
+		{
+			"key": "studentId",
+			"value": "",
+			"type": "string",
+			"description": "Auto-saved by Students / Create Student"
+		},
+		{
+			"key": "studentLoginId",
+			"value": "",
+			"type": "string",
+			"description": "Auto-saved S-XXXX login"
+		},
+		{
+			"key": "studentTempPassword",
+			"value": "",
+			"type": "string",
+			"description": "One-time temp credential (copy immediately)"
 		}
 	],
 	"item": [
@@ -804,6 +846,741 @@
 						}
 					},
 					"response": []
+				}
+			]
+		},
+		{
+			"name": "04 Provision (Admin)",
+			"description": "Phase 4 — admin provisioning. Run after approving/direct-creating an institute and logging in as that institute's admin. Test scripts auto-save `classId`, `teacherId`, `studentId`.",
+			"item": [
+				{
+					"name": "Teachers",
+					"item": [
+						{
+							"name": "Create Teacher",
+							"request": {
+								"description": "Requires admin cookie — login first via `01 Auth / 04 Login` as an approved admin (or any admin). Returns `{ id, name, loginId T-XXXX, tempPassword }` — temp shown ONCE. Saves teacherId/loginId/temp.",
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/admin/teachers",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"teachers"
+									]
+								},
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"name\": \"Meera Sharma\",\n  \"subject\": \"Mathematics\",\n  \"phone\": \"9876543210\",\n  \"gender\": \"F\",\n  \"salaryAmount\": 30000\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								}
+							},
+							"response": [],
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"const j = pm.response.json();",
+											"if (j.ok && j.data) {",
+											"  pm.collectionVariables.set('teacherId', j.data.id);",
+											"  pm.collectionVariables.set('teacherLoginId', j.data.loginId);",
+											"  pm.collectionVariables.set('teacherTempPassword', j.data.tempPassword);",
+											"}"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "List Teachers",
+							"request": {
+								"description": "Requires admin cookie — login first via `01 Auth / 04 Login` as an approved admin (or any admin). Try `?search=meera&status=active&page=1&limit=20`.",
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/admin/teachers?search=meera",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"teachers"
+									],
+									"query": [
+										{
+											"key": "search",
+											"value": "meera"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Get User (teacher)",
+							"request": {
+								"description": "Requires admin cookie — login first via `01 Auth / 04 Login` as an approved admin (or any admin). Includes assignedClasses + canDelete guard info.",
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/admin/users/{{teacherId}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"users",
+										"{{teacherId}}"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Update User (teacher)",
+							"request": {
+								"description": "Requires admin cookie — login first via `01 Auth / 04 Login` as an approved admin (or any admin). Mutable only: name/phone/gender/subject/salaryAmount. Try adding loginId/role/instituteId → expect 403.",
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/admin/users/{{teacherId}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"users",
+										"{{teacherId}}"
+									]
+								},
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"phone\": \"9812345678\",\n  \"subject\": \"Science\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Update User - immutable field (expect 403)",
+							"request": {
+								"description": "Negative test: loginId is immutable → 403.",
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/admin/users/{{teacherId}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"users",
+										"{{teacherId}}"
+									]
+								},
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"loginId\": \"T-9999\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Reset Password (teacher)",
+							"request": {
+								"description": "Requires admin cookie — login first via `01 Auth / 04 Login` as an approved admin (or any admin). Returns new tempPassword ONCE, old credential stops working.",
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/admin/users/{{teacherId}}/reset-password",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"users",
+										"{{teacherId}}",
+										"reset-password"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Delete Teacher",
+							"request": {
+								"description": "Requires admin cookie — login first via `01 Auth / 04 Login` as an approved admin (or any admin). Soft delete. Blocked with 400 while classes still assigned — unassign first.",
+								"method": "DELETE",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/admin/users/{{teacherId}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"users",
+										"{{teacherId}}"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Students",
+					"item": [
+						{
+							"name": "Create Student",
+							"request": {
+								"description": "Requires admin cookie — login first via `01 Auth / 04 Login` as an approved admin (or any admin). Requires classId in own institute. Returns `{ id, loginId S-XXXX, tempPassword, rollNo }`. Saves studentId.",
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/admin/students",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"students"
+									]
+								},
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"name\": \"Aarav Kumar\",\n  \"classId\": \"{{classId}}\",\n  \"gender\": \"M\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								}
+							},
+							"response": [],
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"const j = pm.response.json();",
+											"if (j.ok && j.data) {",
+											"  pm.collectionVariables.set('studentId', j.data.id);",
+											"  pm.collectionVariables.set('studentLoginId', j.data.loginId);",
+											"  pm.collectionVariables.set('studentTempPassword', j.data.tempPassword);",
+											"}"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "List Students",
+							"request": {
+								"description": "Requires admin cookie — login first via `01 Auth / 04 Login` as an approved admin (or any admin). Sorted by rollNo. Try `?classId={{classId}}&search=aarav`.",
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/admin/students?classId={{classId}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"students"
+									],
+									"query": [
+										{
+											"key": "classId",
+											"value": "{{classId}}"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Get User (student)",
+							"request": {
+								"description": "Requires admin cookie — login first via `01 Auth / 04 Login` as an approved admin (or any admin).",
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/admin/users/{{studentId}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"users",
+										"{{studentId}}"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Update User (student)",
+							"request": {
+								"description": "Requires admin cookie — login first via `01 Auth / 04 Login` as an approved admin (or any admin). e.g. name/phone/gender.",
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/admin/users/{{studentId}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"users",
+										"{{studentId}}"
+									]
+								},
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"phone\": \"9765432109\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Remove From Class (to pool)",
+							"request": {
+								"description": "Requires admin cookie — login first via `01 Auth / 04 Login` as an approved admin (or any admin). classId=null, loginId preserved, rollNo gap kept (not reused).",
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/admin/students/{{studentId}}/remove-class",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"students",
+										"{{studentId}}",
+										"remove-class"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Reassign Student",
+							"request": {
+								"description": "Requires admin cookie — login first via `01 Auth / 04 Login` as an approved admin (or any admin). New rollNo = max(target)+1, loginId preserved.",
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/admin/students/{{studentId}}/reassign",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"students",
+										"{{studentId}}",
+										"reassign"
+									]
+								},
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"classId\": \"{{classId}}\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Reset Password (student)",
+							"request": {
+								"description": "Requires admin cookie — login first via `01 Auth / 04 Login` as an approved admin (or any admin). New tempPassword ONCE.",
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/admin/users/{{studentId}}/reset-password",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"users",
+										"{{studentId}}",
+										"reset-password"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Delete Student",
+							"request": {
+								"description": "Requires admin cookie — login first via `01 Auth / 04 Login` as an approved admin (or any admin). Soft delete — marks/attendance history preserved.",
+								"method": "DELETE",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/admin/users/{{studentId}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"users",
+										"{{studentId}}"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Classes",
+					"item": [
+						{
+							"name": "Create Class",
+							"request": {
+								"description": "Requires admin cookie — login first via `01 Auth / 04 Login` as an approved admin (or any admin). instituteId comes from your login, never the body. academicYear like 2025-26. Saves classId.",
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/classes",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"classes"
+									]
+								},
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"name\": \"5th\",\n  \"section\": \"A\",\n  \"standard\": 5,\n  \"academicYear\": \"2025-26\",\n  \"order\": 5\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								}
+							},
+							"response": [],
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"const j = pm.response.json();",
+											"if (j.ok && j.data) { pm.collectionVariables.set('classId', j.data.id); }"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "Create Class - duplicate (expect 409)",
+							"request": {
+								"description": "Negative test: same name+section+academicYear → 409.",
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/classes",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"classes"
+									]
+								},
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"name\": \"5th\",\n  \"section\": \"A\",\n  \"academicYear\": \"2025-26\",\n  \"order\": 5\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "List Classes",
+							"request": {
+								"description": "Requires admin cookie — login first via `01 Auth / 04 Login` as an approved admin (or any admin). Try `?academicYear=2025-26`. Teachers see own classes only.",
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/classes?academicYear=2025-26",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"classes"
+									],
+									"query": [
+										{
+											"key": "academicYear",
+											"value": "2025-26"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Get Class",
+							"request": {
+								"description": "Requires admin cookie — login first via `01 Auth / 04 Login` as an approved admin (or any admin). Includes studentCount.",
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/classes/{{classId}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"classes",
+										"{{classId}}"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Update Class",
+							"request": {
+								"description": "Requires admin cookie — login first via `01 Auth / 04 Login` as an approved admin (or any admin). Mutable fields incl. teacherId (same-institute active teacher).",
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/classes/{{classId}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"classes",
+										"{{classId}}"
+									]
+								},
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"section\": \"B\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Assign Teacher",
+							"request": {
+								"description": "Requires admin cookie — login first via `01 Auth / 04 Login` as an approved admin (or any admin). Teacher must be same-institute + active.",
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/admin/classes/{{classId}}/teacher",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"classes",
+										"{{classId}}",
+										"teacher"
+									]
+								},
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"teacherId\": \"{{teacherId}}\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Resequence Roll",
+							"request": {
+								"description": "Requires admin cookie — login first via `01 Auth / 04 Login` as an approved admin (or any admin). Alphabetical 1..N — the only allowed reshuffle.",
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/admin/classes/{{classId}}/resequence-roll",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"classes",
+										"{{classId}}",
+										"resequence-roll"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Delete Class",
+							"request": {
+								"description": "Requires admin cookie — login first via `01 Auth / 04 Login` as an approved admin (or any admin). Soft delete. Blocked with 400 while students remain — move/remove them first.",
+								"method": "DELETE",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/classes/{{classId}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"classes",
+										"{{classId}}"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Settings",
+					"item": [
+						{
+							"name": "Set Terminal Class",
+							"request": {
+								"description": "Requires admin cookie — login first via `01 Auth / 04 Login` as an approved admin (or any admin). Last standard of the school (e.g. 8th). Future promotes beyond it → 403 (promotion ships later).",
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/admin/settings/terminal-class",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"settings",
+										"terminal-class"
+									]
+								},
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"terminalClassId\": \"{{classId}}\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								}
+							},
+							"response": []
+						}
+					]
 				}
 			]
 		}

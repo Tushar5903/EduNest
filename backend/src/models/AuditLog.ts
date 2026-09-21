@@ -7,7 +7,21 @@ export type AuditAction =
   | "admin.blocked"
   | "admin.unblocked"
   | "school.suspended"
-  | "school.unsuspended";
+  | "school.unsuspended"
+  // Phase 4 — admin provisioning (single-school manager trail).
+  | "teacher.created"
+  | "student.created"
+  | "user.updated"
+  | "user.deleted"
+  | "password.reset"
+  | "student.removed-from-class"
+  | "student.reassigned"
+  | "class.teacher-assigned"
+  | "roll.resequenced"
+  | "class.created"
+  | "class.updated"
+  | "class.deleted"
+  | "terminal-class.set";
 
 /**
  * Append-only trail for super-admin (and later admin) actions.
@@ -36,6 +50,19 @@ const auditLogSchema = new Schema<AuditLogDoc>(
         "admin.unblocked",
         "school.suspended",
         "school.unsuspended",
+        "teacher.created",
+        "student.created",
+        "user.updated",
+        "user.deleted",
+        "password.reset",
+        "student.removed-from-class",
+        "student.reassigned",
+        "class.teacher-assigned",
+        "roll.resequenced",
+        "class.created",
+        "class.updated",
+        "class.deleted",
+        "terminal-class.set",
       ],
       required: true,
       index: true,
