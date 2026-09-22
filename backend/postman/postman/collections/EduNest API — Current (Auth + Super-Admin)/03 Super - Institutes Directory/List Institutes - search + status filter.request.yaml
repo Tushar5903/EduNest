@@ -1,8 +1,0 @@
-$kind: http-request
-description: Demo of `?search` (matches name/code, regex-safe) + `?status=active`. Try status=pending|suspended, search=GREENWOOD. Invalid status → 400.
-url: "{{baseUrl}}/super/institutes?search=greenwood&status=active"
-method: GET
-queryParams:
-  search: greenwood
-  status: active
-order: 3000

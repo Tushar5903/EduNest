@@ -6,7 +6,7 @@ export type UserStatus = "pending" | "active" | "suspended" | "rejected";
 export interface UserDoc extends Document {
   name: string;
   email?: string;
-  /** Global-unique, immutable login: T-XXXX (teacher) / S-XXXX (student). Admins use email. */
+  /** Global-unique, immutable login: T-XXXX (teacher) / 6-digit (student). Admins use email. */
   loginId?: string;
   passwordHash: string;
   role: Role;
@@ -69,6 +69,13 @@ userSchema.index(
   { unique: true, partialFilterExpression: { rollNo: { $type: "number" } } },
 );
 userSchema.index({ instituteId: 1, role: 1 });
+
+// Phone is unique ONLY among active teachers (login alias). Students and
+// admins share freely; soft-deleted teachers release their number for reuse.
+userSchema.index(
+  { phone: 1 },
+  { unique: true, partialFilterExpression: { role: "teacher", active: true, phone: { $type: "string" } } },
+);
 
 // Never leak hashes, even if a controller forgets to project them out.
 userSchema.set("toJSON", {

@@ -1,7 +1,0 @@
-$kind: http-request
-description: Already-approved queue. `?status=active`. After approving, your Sunrise row moves here.
-url: "{{baseUrl}}/super/requests?status=active"
-method: GET
-queryParams:
-  status: active
-order: 2000

@@ -1,3 +1,0 @@
-$kind: collection
-description: Run in order 01 → 09. Login as super-admin once; cookies auth the rest.
-order: 2000

@@ -1,7 +1,0 @@
-$kind: http-request
-description: Default queue view. `GET /api/super/requests?status=pending`. Shows institute + requesting admin profile only — no student/teacher data.
-url: "{{baseUrl}}/super/requests?status=pending"
-method: GET
-queryParams:
-  status: pending
-order: 1000

@@ -3,9 +3,10 @@ import { AuditLog } from "../models/AuditLog.js";
 import { Class } from "../models/Class.js";
 import { User, type UserDoc } from "../models/User.js";
 import { ApiError } from "../utils/errors.js";
-import { generateLoginId, generateReferenceId, nextRollNo } from "../utils/idGenerator.js";
+import { generateLoginId, generateReferenceId, generateStudentId, nextRollNo } from "../utils/idGenerator.js";
 import { parsePagination } from "../utils/pagination.js";
 import { hashSecret } from "../utils/password.js";
+import { normalizePhone } from "../utils/phone.js";
 import { assertObjectId, escapeRegExpValue, requireClassInInstitute, requireUserInInstitute } from "../utils/scope.js";
 
 interface SanitizedUser {
@@ -51,42 +52,57 @@ export function sanitizeUser(u: UserDoc): SanitizedUser {
 }
 
 // ---------------------------------------------------------------------------
-// A. Create teacher — auto T-XXXX + one-time temp credential.
+// A. Create teacher — auto T-XXXX + required unique phone + one-time temp.
 // ---------------------------------------------------------------------------
 export interface CreateTeacherInput {
   name: string;
   subject: string;
-  phone?: string;
+  phone: string;
   gender?: "M" | "F" | "O";
   salaryAmount?: number;
 }
 
 export async function createTeacher(adminId: string, instituteId: string, input: CreateTeacherInput) {
+  const phone = normalizePhone(input.phone);
+  const clash = await User.findOne({ phone, role: "teacher", active: true }).select("_id").lean();
+  if (clash) throw ApiError.conflict("Phone already registered to another teacher");
+
   const loginId = await generateLoginId("teacher");
   const tempPassword = generateReferenceId();
-  const teacher = await User.create({
-    name: input.name.trim(),
-    subject: input.subject.trim(),
-    phone: input.phone,
-    gender: input.gender,
-    salaryAmount: input.salaryAmount,
-    loginId,
-    passwordHash: await hashSecret(tempPassword),
-    role: "teacher",
-    instituteId: new Types.ObjectId(instituteId),
-    status: "active",
-  });
+  let teacher;
+  try {
+    teacher = await User.create({
+      name: input.name.trim(),
+      subject: input.subject.trim(),
+      phone,
+      gender: input.gender,
+      salaryAmount: input.salaryAmount,
+      loginId,
+      passwordHash: await hashSecret(tempPassword),
+      role: "teacher",
+      instituteId: new Types.ObjectId(instituteId),
+      status: "active",
+    });
+  } catch (err) {
+    // Race backstop: unique phone index fired between check and insert.
+    if (typeof err === "object" && err !== null && (err as { code?: unknown }).code === 11000) {
+      throw ApiError.conflict("Phone already registered to another teacher");
+    }
+    throw err;
+  }
   await AuditLog.create({ by: adminId, instituteId, action: "teacher.created" });
-  return { id: String(teacher._id), name: teacher.name, loginId, tempPassword };
+  return { id: String(teacher._id), name: teacher.name, loginId, tempPassword, phone };
 }
 
 // ---------------------------------------------------------------------------
-// B. Create student — auto S-XXXX + rollNo = max(target class) + 1.
+// B. Create student — auto 6-digit ID + rollNo = max(target class) + 1.
+//    Phone is an optional shared profile field — never a login.
 // ---------------------------------------------------------------------------
 export interface CreateStudentInput {
   name: string;
   classId: string;
   gender?: "M" | "F" | "O";
+  phone?: string;
 }
 
 export async function createStudent(adminId: string, instituteId: string, input: CreateStudentInput) {
@@ -102,11 +118,12 @@ export async function createStudent(adminId: string, instituteId: string, input:
   });
   const rollNo = nextRollNo(existing as number[]);
 
-  const loginId = await generateLoginId("student");
+  const loginId = await generateStudentId();
   const tempPassword = generateReferenceId();
   const student = await User.create({
     name: input.name.trim(),
     gender: input.gender,
+    phone: input.phone ? normalizePhone(input.phone) : undefined,
     loginId,
     passwordHash: await hashSecret(tempPassword),
     role: "student",
@@ -230,7 +247,17 @@ export async function updateUser(adminId: string, instituteId: string, userId: s
   if (!user.active) throw ApiError.notFound("User not found");
 
   if (input.name !== undefined) user.name = input.name.trim();
-  if (input.phone !== undefined) user.phone = input.phone;
+  if (input.phone !== undefined) {
+    const phone = normalizePhone(input.phone);
+    // Teachers keep the active-teacher uniqueness invariant on edit too.
+    if (user.role === "teacher" && phone !== user.phone) {
+      const clash = await User.findOne({ phone, role: "teacher", active: true, _id: { $ne: user._id } })
+        .select("_id")
+        .lean();
+      if (clash) throw ApiError.conflict("Phone already registered to another teacher");
+    }
+    user.phone = phone;
+  }
   if (input.gender !== undefined) user.gender = input.gender;
   if (input.subject !== undefined) user.subject = input.subject.trim();
   if (input.salaryAmount !== undefined) user.salaryAmount = input.salaryAmount;

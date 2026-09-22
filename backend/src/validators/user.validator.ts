@@ -1,24 +1,36 @@
 import { z } from "zod";
+import { normalizePhone } from "../utils/phone.js";
 
 const gender = z.enum(["M", "F", "O"]);
 
-/** POST /api/admin/teachers — name + subject required. role/instituteId/loginId never accepted. */
+/** Phone as typed (spaces/+/dashes allowed) — must normalize to 10–15 digits. */
+const phoneInput = z
+  .string()
+  .trim()
+  .min(1, "phone required")
+  .refine((v) => /^\d{10,15}$/.test(normalizePhone(v)), "phone must be 10–15 digits");
+
+/** POST /api/admin/teachers — name + subject + phone required. role/instituteId/loginId never accepted. */
 export const createTeacherValidator = z
   .object({
     name: z.string().trim().min(2, "name required"),
     subject: z.string().trim().min(1, "subject required"),
-    phone: z.string().trim().optional(),
+    phone: phoneInput,
     gender: gender.optional(),
     salaryAmount: z.number().min(0).optional(),
   })
   .strict();
 
-/** POST /api/admin/students — name + classId required. */
+/**
+ * POST /api/admin/students — name + classId required.
+ * Phone is an optional PROFILE field only (freely shared, never a login).
+ */
 export const createStudentValidator = z
   .object({
     name: z.string().trim().min(2, "name required"),
     classId: z.string().trim().min(1, "classId required"),
     gender: gender.optional(),
+    phone: z.string().trim().optional(),
   })
   .strict();
 

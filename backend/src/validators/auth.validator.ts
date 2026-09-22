@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-/** Login identifier = email (admin/super-admin) OR loginId T-XXXX/S-XXXX (teacher/student). */
+/** Login identifier = email (admin) OR T-XXXX / teacher phone OR 6-digit student ID. */
 export const loginValidator = z.object({
   identifier: z.string().trim().min(1, "identifier required"),
   password: z.string().min(1, "password required"),

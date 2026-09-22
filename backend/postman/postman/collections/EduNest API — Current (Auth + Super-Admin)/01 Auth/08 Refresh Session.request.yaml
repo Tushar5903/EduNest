@@ -1,5 +1,0 @@
-$kind: http-request
-description: Auth via refresh cookie. Reads `edunest_refresh`, rotates it, re-sets both cookies, returns `{ user }`. Old refresh token is invalidated (reuse → 401). Works even if access token expired.
-url: "{{baseUrl}}/auth/refresh"
-method: POST
-order: 8000

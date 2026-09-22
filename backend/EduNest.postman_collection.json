@@ -1,7 +1,7 @@
 {
 	"info": {
 		"_postman_id": "edunest-api-collection-v1",
-		"name": "EduNest API — Auth + Super-Admin + Provision (Phase 4)",
+		"name": "EduNest API — Auth + Provision + Teacher + Login Resolution",
 		"description": "# EduNest API — Manual Testing Collection\n\nCovers **all currently implemented routes** (`backend/src/app.ts`):\n\n- `GET /api/health`\n- `POST /api/auth/admin-request`, `/api/auth/login`, `/api/auth/refresh`, `/api/auth/logout`, `GET /api/auth/me`\n- `GET /api/super/requests`, `POST /api/super/requests/:id/approve`, `POST /api/super/requests/:id/reject`\n- `POST /api/super/institutes`, `GET /api/super/institutes`, `GET /api/super/institutes/:id`, `PATCH /api/super/institutes/:id/status`\n\n> NOTE: Admin / Teacher / Student / Classes / Timetable / Attendance / Tests / Fees / Salary / Notices / Complaints / Reports routes from `backendplan.md` are **NOT implemented yet** — so they are intentionally NOT in this collection.\n\n## Setup (2 min)\n\n1. Start backend: `cd backend` then `npm run dev` (expects `PORT=4000`, MongoDB running, `backend/.env` filled — see `backend/.env.example`).\n2. Import this file into Postman: **Import → File → EduNest.postman_collection.json**.\n3. Select collection → **Variables** tab → set:\n   - `baseUrl` = `http://localhost:4000/api`\n   - `superEmail` = your `SUPER_EMAIL` from `backend/.env` (default in `.env.example` is `super@edunest.in`)\n   - `superPassword` = your `SUPER_PASSWORD` (default in `.env.example` is `Super@123`)\n4. Cookies: Postman saves `edunest_token` + `edunest_refresh` (httpOnly) automatically. Keep **Cookie Jar enabled** (Postman does this by default). Login once, then all `Super` + `Me` requests work.\n5. Follow the **suggested order** below (folder order = workflow order).\n\n## Suggested manual flow\n\n1. `Health` → should be `{ ok: true, data: { service, db, time } }`.\n2. `Auth / 01 + 02 Admin Request` → creates 2 pending schools. Test scripts auto-save `instituteId` and `rejectInstituteId`.\n3. `Auth / 04 Login Super-Admin` → sets cookies (also returns `{ user }`).\n4. `Super Requests / List Pending` → see your 2 new rows, copy `instituteId` if needed.\n5. `Super Requests / Approve` → approves `{{instituteId}}`.\n6. `Super Institutes / Direct Create` → offline onboarding, auto-saves new `{{instituteId}}` + `tempPassword` (returned ONCE).\n7. `Super Institutes / Directory + Detail + Status` → block/unblock/suspend/unsuspend cycle.\n8. `Auth / Me, Refresh, Logout` → session checks.\n\nAll success bodies use envelope `{ ok: true, data: ... }`. Errors use `{ ok: false, error, details? }` with `400/401/403/404/409/429`.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
@@ -95,6 +95,24 @@
 			"value": "",
 			"type": "string",
 			"description": "One-time temp credential (copy immediately)"
+		},
+		{
+			"key": "teacherStudentId",
+			"value": "",
+			"type": "string",
+			"description": "Auto-saved by 05 Teacher / Create Student"
+		},
+		{
+			"key": "teacherPhone",
+			"value": "",
+			"type": "string",
+			"description": "Teacher phone (digits), auto-saved by 04 Create Teacher — also a login alias"
+		},
+		{
+			"key": "studentPhoneShared",
+			"value": "9100012345",
+			"type": "string",
+			"description": "A phone shared by students — must NEVER log anyone in (401)"
 		}
 	],
 	"item": [
@@ -419,6 +437,152 @@
 								"auth",
 								"logout"
 							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "10 Login - Teacher (T-XXXX + temp password)",
+					"request": {
+						"description": "Teacher login = SAME /auth/login endpoint. identifier = T-XXXX loginId (auto-saved by 04 Provision / Create Teacher), password = one-time temp. Sets teacher cookies — run this before the 05 Teacher folder.",
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-Client",
+								"value": "portal",
+								"description": "teachers/students log in via the portal app"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"identifier\": \"{{teacherLoginId}}\",\n  \"password\": \"{{teacherTempPassword}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"login"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "11 Login - Student (6-digit ID + temp password)",
+					"request": {
+						"description": "Student login = SAME /auth/login endpoint. identifier = 6-digit login ID starting at 100000 (auto-saved by 04 Provision / Create Student), password = one-time temp. Student phone numbers NEVER log in — use the 6-digit ID.",
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-Client",
+								"value": "portal",
+								"description": "teachers/students log in via the portal app"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"identifier\": \"{{studentLoginId}}\",\n  \"password\": \"{{studentTempPassword}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"login"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "12 Login - Teacher via phone",
+					"request": {
+						"description": "Teacher alias login = SAME /auth/login endpoint. identifier = teacher's phone (10–15 digits after normalization; '+91 98765 43210' and '919876543210' both work). Phone must be unique among active teachers. Auto-saved as {{teacherPhone}} by 04 Provision / Create Teacher.",
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-Client",
+								"value": "portal"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/auth/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"login"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"identifier\": \"{{teacherPhone}}\",\n  \"password\": \"{{teacherTempPassword}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "13 Student phone login (expect 401)",
+					"request": {
+						"description": "Negative test: student phone numbers are shared contact fields, never login identifiers. A phone that belongs only to students resolves to no account → generic 401 'Invalid credentials' (no leakage).",
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/auth/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"login"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"identifier\": \"{{studentPhoneShared}}\",\n  \"password\": \"{{studentTempPassword}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
 						}
 					},
 					"response": []
@@ -859,7 +1023,7 @@
 						{
 							"name": "Create Teacher",
 							"request": {
-								"description": "Requires admin cookie — login first via `01 Auth / 04 Login` as an approved admin (or any admin). Returns `{ id, name, loginId T-XXXX, tempPassword }` — temp shown ONCE. Saves teacherId/loginId/temp.",
+								"description": "Requires admin cookie — login first via `01 Auth / 04 Login` as an approved admin (or any admin). Returns `{ id, name, loginId T-XXXX, tempPassword }` — temp shown ONCE. Saves teacherId/loginId/temp.\n\nPHONE IS REQUIRED (10–15 digits after normalization; spaces/+ accepted) and must be UNIQUE among active teachers — duplicate → 409. Saves teacherId/loginId/temp + teacherPhone.",
 								"method": "POST",
 								"header": [
 									{
@@ -899,7 +1063,8 @@
 											"  pm.collectionVariables.set('teacherId', j.data.id);",
 											"  pm.collectionVariables.set('teacherLoginId', j.data.loginId);",
 											"  pm.collectionVariables.set('teacherTempPassword', j.data.tempPassword);",
-											"}"
+											"}",
+											"if (j.ok && j.data && j.data.phone) { pm.collectionVariables.set('teacherPhone', j.data.phone); }"
 										]
 									}
 								}
@@ -1063,6 +1228,39 @@
 								}
 							},
 							"response": []
+						},
+						{
+							"name": "Create Teacher - duplicate phone (expect 409)",
+							"request": {
+								"description": "Negative test: same phone as an existing active teacher → 409 'Phone already registered'. Soft-deleted teachers free their number.",
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/admin/teachers",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"teachers"
+									]
+								},
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"name\": \"Duplicate Phone\",\n  \"subject\": \"Maths\",\n  \"phone\": \"{{teacherPhone}}\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								}
+							},
+							"response": []
 						}
 					]
 				},
@@ -1072,7 +1270,7 @@
 						{
 							"name": "Create Student",
 							"request": {
-								"description": "Requires admin cookie — login first via `01 Auth / 04 Login` as an approved admin (or any admin). Requires classId in own institute. Returns `{ id, loginId S-XXXX, tempPassword, rollNo }`. Saves studentId.",
+								"description": "Requires admin cookie — login first via `01 Auth / 04 Login` as an approved admin (or any admin). Requires classId in own institute. Returns `{ id, loginId 6-digit ID, tempPassword, rollNo }`. Saves studentId.",
 								"method": "POST",
 								"header": [
 									{
@@ -1576,6 +1774,227 @@
 											"language": "json"
 										}
 									}
+								}
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "05 Teacher",
+			"description": "Phase §5 Core — teacher's own classes only. Teacher cookie flow: login via `01 Auth / 04 Login` with a TEACHER loginId (T-XXXX) + temp password from `04 Provision / Create Teacher`. Postman keeps the httpOnly cookies — do NOT reuse an admin cookie here (admin → 403).",
+			"item": [
+				{
+					"name": "My Classes",
+					"request": {
+						"description": "Only classes where Class.teacherId == you. Teacher cookie flow: login via `01 Auth / 04 Login` with a TEACHER loginId (T-XXXX) + temp password from `04 Provision / Create Teacher`. Postman keeps the httpOnly cookies — do NOT reuse an admin cookie here (admin → 403).",
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/teacher/classes",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"teacher",
+								"classes"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Dashboard",
+					"request": {
+						"description": "Total + genderCounts {M/F/O} + rollNo-sorted roster (feeStatus null, performance/attendance 0 stubs). Unowned class → 403.",
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/teacher/classes/{{classId}}/dashboard",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"teacher",
+								"classes",
+								"{{classId}}",
+								"dashboard"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Student",
+					"request": {
+						"description": "Own class only (classId must be yours) → 6-digit ID (from 100000) + tempPassword + rollNo=max+1, returned once. Saves teacherStudentId.",
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/teacher/students",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"teacher",
+								"students"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Rohan Verma\",\n  \"classId\": \"{{classId}}\",\n  \"gender\": \"M\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"const j = pm.response.json();",
+									"if (j.ok && j.data) { pm.collectionVariables.set('teacherStudentId', j.data.id); }"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Negative Cases",
+					"item": [
+						{
+							"name": "Create in unowned class (expect 403)",
+							"request": {
+								"description": "Use a classId owned by another teacher (or another institute) → 403, nothing created.",
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/teacher/students",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"teacher",
+										"students"
+									]
+								},
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"name\": \"Sneaky\",\n  \"classId\": \"000000000000000000000000\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Dashboard of unowned class (expect 403)",
+							"request": {
+								"description": "Another teacher's (or foreign) class → 403.",
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/teacher/classes/000000000000000000000000/dashboard",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"teacher",
+										"classes",
+										"000000000000000000000000",
+										"dashboard"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Strict body - smuggled teacherId (expect 400)",
+							"request": {
+								"description": "Unknown fields rejected by strict validator. (Smuggled instituteId is instead caught by scope guard → 403.)",
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/teacher/students",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"teacher",
+										"students"
+									]
+								},
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"name\": \"Strict Probe\",\n  \"classId\": \"{{classId}}\",\n  \"teacherId\": \"000000000000000000000000\",\n  \"role\": \"admin\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Admin cookie on teacher route (expect 403)",
+							"request": {
+								"description": "Login as admin, then call this → 403 Forbidden for this role.",
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/teacher/classes",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"teacher",
+										"classes"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Teacher password change (expect 404)",
+							"request": {
+								"description": "Negative test: teachers cannot change passwords — no such route exists (admin resets only). Login as teacher first; expect 404.",
+								"method": "POST",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/teacher/change-password",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"teacher",
+										"change-password"
+									]
 								}
 							},
 							"response": []

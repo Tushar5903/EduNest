@@ -1,10 +1,24 @@
 import { randomInt } from "node:crypto";
-import { nextSequence } from "../models/Counter.js";
+import { nextSequence, nextStudentIdSequence } from "../models/Counter.js";
+import { ApiError } from "./errors.js";
 
-/** Next globally-unique loginId: T-1001… / S-1001… (immutable, login only). */
+/** Next globally-unique teacher loginId: T-1001… (immutable, login only). */
+export async function generateLoginId(role: "teacher"): Promise<string>;
+/** @deprecated Student IDs are 6-digit now — use generateStudentId(). Kept for compat. */
+export async function generateLoginId(role: "student"): Promise<string>;
 export async function generateLoginId(role: "teacher" | "student"): Promise<string> {
   const seq = await nextSequence(role);
   return `${role === "teacher" ? "T" : "S"}-${seq}`;
+}
+
+/**
+ * Next globally-unique student loginId: 100000, 100001, … (immutable, login).
+ * Sequential from the atomic studentId Counter — never random, never S-XXXX.
+ */
+export async function generateStudentId(): Promise<string> {
+  const seq = await nextStudentIdSequence();
+  if (seq < 100000 || seq > 999999) throw ApiError.badRequest("Student ID pool exhausted");
+  return String(seq).padStart(6, "0");
 }
 
 /**

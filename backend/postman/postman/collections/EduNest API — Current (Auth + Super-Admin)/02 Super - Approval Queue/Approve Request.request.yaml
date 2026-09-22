@@ -1,5 +1,0 @@
-$kind: http-request
-description: Sets Institute=active + Admin=active, writes AuditLog. Idempotent (re-approve → same 200). Uses `{{instituteId}}` auto-saved from Auth/01. Replace `:id` with a real ObjectId from the pending list.
-url: "{{baseUrl}}/super/requests/{{instituteId}}/approve"
-method: POST
-order: 4000

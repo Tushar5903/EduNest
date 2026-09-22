@@ -1,5 +1,0 @@
-$kind: http-request
-description: "Negative test: malformed ObjectId → 400 'Invalid id format' (not 500). Unknown-but-valid ObjectId → 404."
-url: "{{baseUrl}}/super/requests/not-a-valid-id/approve"
-method: POST
-order: 6000

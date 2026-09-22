@@ -3,6 +3,7 @@ import { Institute } from "../models/Institute.js";
 import { User, type UserDoc } from "../models/User.js";
 import { env } from "../config/env.js";
 import { ApiError } from "../utils/errors.js";
+import { normalizePhone } from "../utils/phone.js";
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../utils/jwt.js";
 import { hashSecret, verifySecret } from "../utils/password.js";
 
@@ -127,9 +128,13 @@ export interface LoginResult {
 }
 
 /**
- * Identifier login: email (admin/super-admin) OR loginId T-XXXX/S-XXXX
- * (teacher/student). Portal vs console field separation is UX; the backend
- * accepts both and RBAC gates every endpoint afterwards.
+ * Identifier login. Every identifier resolves to exactly one account:
+ * - email (admin/super-admin) — contains "@"
+ * - 6-digit loginId (student) — /^\d{6}$/
+ * - 10–15 digit phone (teacher alias, unique among active teachers)
+ * - anything else — loginId as before (T-XXXX keeps working)
+ * Portal vs console field separation is UX; the backend accepts all forms and
+ * RBAC gates every endpoint afterwards.
  */
 export async function login(identifier: string, password: string): Promise<LoginResult> {
   // Environment-backed Super Admin takes precedence over the database.
@@ -141,7 +146,14 @@ export async function login(identifier: string, password: string): Promise<Login
   }
 
   const id = identifier.trim();
-  const query = id.includes("@") ? { email: id.toLowerCase() } : { loginId: id.toUpperCase() };
+  const digits = normalizePhone(id);
+  const query = id.includes("@")
+    ? { email: id.toLowerCase() }
+    : /^\d{6}$/.test(digits)
+      ? { loginId: digits }
+      : /^\d{10,15}$/.test(digits)
+        ? { phone: digits, role: "teacher", active: true }
+        : { loginId: id.toUpperCase() };
 
   const user = await User.findOne(query).select("+passwordHash +refreshTokenHash");
   // Generic message — never reveal whether the identifier exists.
