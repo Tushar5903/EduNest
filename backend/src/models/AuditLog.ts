@@ -21,7 +21,14 @@ export type AuditAction =
   | "class.created"
   | "class.updated"
   | "class.deleted"
-  | "terminal-class.set";
+  | "terminal-class.set"
+  // Schedule & Attendance phase.
+  | "timetable.created"
+  | "timetable.updated"
+  | "timetable.deleted"
+  | "attendance.marked"
+  | "attendance.updated"
+  | "class-info.posted";
 
 /**
  * Append-only trail for super-admin (and later admin) actions.
@@ -63,6 +70,12 @@ const auditLogSchema = new Schema<AuditLogDoc>(
         "class.updated",
         "class.deleted",
         "terminal-class.set",
+        "timetable.created",
+        "timetable.updated",
+        "timetable.deleted",
+        "attendance.marked",
+        "attendance.updated",
+        "class-info.posted",
       ],
       required: true,
       index: true,

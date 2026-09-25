@@ -1,8 +1,8 @@
 {
 	"info": {
 		"_postman_id": "edunest-api-collection-v1",
-		"name": "EduNest API — Auth + Provision + Teacher + Login Resolution",
-		"description": "# EduNest API — Manual Testing Collection\n\nCovers **all currently implemented routes** (`backend/src/app.ts`):\n\n- `GET /api/health`\n- `POST /api/auth/admin-request`, `/api/auth/login`, `/api/auth/refresh`, `/api/auth/logout`, `GET /api/auth/me`\n- `GET /api/super/requests`, `POST /api/super/requests/:id/approve`, `POST /api/super/requests/:id/reject`\n- `POST /api/super/institutes`, `GET /api/super/institutes`, `GET /api/super/institutes/:id`, `PATCH /api/super/institutes/:id/status`\n\n> NOTE: Admin / Teacher / Student / Classes / Timetable / Attendance / Tests / Fees / Salary / Notices / Complaints / Reports routes from `backendplan.md` are **NOT implemented yet** — so they are intentionally NOT in this collection.\n\n## Setup (2 min)\n\n1. Start backend: `cd backend` then `npm run dev` (expects `PORT=4000`, MongoDB running, `backend/.env` filled — see `backend/.env.example`).\n2. Import this file into Postman: **Import → File → EduNest.postman_collection.json**.\n3. Select collection → **Variables** tab → set:\n   - `baseUrl` = `http://localhost:4000/api`\n   - `superEmail` = your `SUPER_EMAIL` from `backend/.env` (default in `.env.example` is `super@edunest.in`)\n   - `superPassword` = your `SUPER_PASSWORD` (default in `.env.example` is `Super@123`)\n4. Cookies: Postman saves `edunest_token` + `edunest_refresh` (httpOnly) automatically. Keep **Cookie Jar enabled** (Postman does this by default). Login once, then all `Super` + `Me` requests work.\n5. Follow the **suggested order** below (folder order = workflow order).\n\n## Suggested manual flow\n\n1. `Health` → should be `{ ok: true, data: { service, db, time } }`.\n2. `Auth / 01 + 02 Admin Request` → creates 2 pending schools. Test scripts auto-save `instituteId` and `rejectInstituteId`.\n3. `Auth / 04 Login Super-Admin` → sets cookies (also returns `{ user }`).\n4. `Super Requests / List Pending` → see your 2 new rows, copy `instituteId` if needed.\n5. `Super Requests / Approve` → approves `{{instituteId}}`.\n6. `Super Institutes / Direct Create` → offline onboarding, auto-saves new `{{instituteId}}` + `tempPassword` (returned ONCE).\n7. `Super Institutes / Directory + Detail + Status` → block/unblock/suspend/unsuspend cycle.\n8. `Auth / Me, Refresh, Logout` → session checks.\n\nAll success bodies use envelope `{ ok: true, data: ... }`. Errors use `{ ok: false, error, details? }` with `400/401/403/404/409/429`.",
+		"name": "EduNest API — Auth + Provision + Teacher + Login Resolution + Schedule",
+		"description": "# RUN ORDER — follow top to bottom on a fresh import\n\n0. Start the backend (`npm run dev` in `backend/`). Set `superEmail`/`superPassword` collection variables from `backend/.env`.\n1. `00 Health` → must be ok:true.\n2. `01 Auth`: run `01` (saves instituteId), then `04 Login - Super Admin`.\n3. `02 Super`: `List Pending` → `Approve Request` (or `Reject Request` for the second school).\n4. `01 Auth`: run `05b Login - Admin` — this switches your cookies to the school admin (needed for everything below).\n5. `04 Provision`: run `Teachers/Create Teacher` → `Classes/Create Class` FIRST → then `Students/Create Student` (needs classId) → `Settings/Set Terminal Class`.\n6. `01 Auth`: run `10 Login - Teacher` (switches cookies to teacher), then use `05 Teacher` + `06` teacher requests.\n7. `01 Auth`: run `11 Login - Student` for `06` student requests (`My Attendance`, student timetable).\n8. `06`: admin creates timetable → teacher checks `Today Schedule` → teacher `Mark Attendance` → student `My Attendance`.\n\nCookies: Postman stores the httpOnly session automatically. Re-run the matching login request whenever you switch roles. Test scripts auto-save all IDs/temps into collection variables.\n\n---\n\n# EduNest API — Manual Testing Collection\n\nCovers **all currently implemented routes** (`backend/src/app.ts`):\n\n- `GET /api/health`\n- `POST /api/auth/admin-request`, `/api/auth/login`, `/api/auth/refresh`, `/api/auth/logout`, `GET /api/auth/me`\n- `GET /api/super/requests`, `POST /api/super/requests/:id/approve`, `POST /api/super/requests/:id/reject`\n- `POST /api/super/institutes`, `GET /api/super/institutes`, `GET /api/super/institutes/:id`, `PATCH /api/super/institutes/:id/status`",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"variable": [
@@ -113,6 +113,30 @@
 			"value": "9100012345",
 			"type": "string",
 			"description": "A phone shared by students — must NEVER log anyone in (401)"
+		},
+		{
+			"key": "periodId",
+			"value": "",
+			"type": "string",
+			"description": "Auto-saved by 06 / Create Timetable"
+		},
+		{
+			"key": "attendanceId",
+			"value": "",
+			"type": "string",
+			"description": "Auto-saved by 06 / Mark Attendance"
+		},
+		{
+			"key": "attendanceDate",
+			"value": "2026-09-23",
+			"type": "string",
+			"description": "Date used for attendance marking (YYYY-MM-DD)"
+		},
+		{
+			"key": "attendanceMonth",
+			"value": "",
+			"type": "string",
+			"description": "Auto-set to current YYYY-MM by My Attendance pre-request"
 		}
 	],
 	"item": [
@@ -328,6 +352,43 @@
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"identifier\": \"demo.admin1@sunrise-school.in\",\n  \"password\": \"Demo@1234\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"login"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "05b Login - Admin (approved school)",
+					"request": {
+						"description": "THE request to run after your school is active (via Approve Request or Direct Create). Uses {{adminEmail}} / {{adminPassword}} — prefilled for the Sunrise approve-flow; auto-saved by Direct Create. Sets the admin cookies needed for 04 Provision. X-Client: console.",
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-Client",
+								"value": "console"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"identifier\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -796,6 +857,11 @@
 									"if (json.ok && json.data && json.data.tempPassword) {",
 									"    pm.collectionVariables.set('tempPassword', json.data.tempPassword);",
 									"    console.log('Saved tempPassword (copy now, shown once):', json.data.tempPassword);",
+									"}",
+									"if (json.ok && json.data && json.data.adminEmail) {",
+									"    pm.collectionVariables.set('adminEmail', json.data.adminEmail);",
+									"    pm.collectionVariables.set('adminPassword', json.data.tempPassword);",
+									"    console.log('Saved adminEmail + adminPassword — now run 05b Login - Admin');",
 									"}"
 								]
 							}
@@ -1015,7 +1081,7 @@
 		},
 		{
 			"name": "04 Provision (Admin)",
-			"description": "Phase 4 — admin provisioning. Run after approving/direct-creating an institute and logging in as that institute's admin. Test scripts auto-save `classId`, `teacherId`, `studentId`.",
+			"description": "RUN ORDER inside this folder: `Teachers/Create Teacher` → `Classes/Create Class` → `Students/*` (Create Student needs the saved classId) → `Settings`. Admin cookie required (run 05b first).\n\nPhase 4 — admin provisioning. Run after approving/direct-creating an institute and logging in as that institute's admin. Test scripts auto-save `classId`, `teacherId`, `studentId`.",
 			"item": [
 				{
 					"name": "Teachers",
@@ -1258,6 +1324,25 @@
 											"language": "json"
 										}
 									}
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "List Teachers - unauthenticated (expect 401)",
+							"request": {
+								"description": "Negative test: with NO session cookies this returns 401 Unauthenticated. In Postman you must clear cookies first: click `Cookies` under the Send button, select localhost:4000, delete `edunest_token`, then Send. (If a valid session exists you get 200 instead.)",
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/admin/teachers",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"teachers"
+									]
 								}
 							},
 							"response": []
@@ -1995,6 +2080,565 @@
 										"teacher",
 										"change-password"
 									]
+								}
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "06 Schedule & Attendance",
+			"description": "PREREQUISITES — run these first (top to bottom), otherwise IDs are empty and every request fails:\n1. `01 Auth → 05b Login - Admin` (admin cookies).\n2. `04 Provision → Teachers → Create Teacher` (saves teacherId, teacherLoginId, teacherTempPassword, teacherPhone).\n3. `04 Provision → Classes → Create Class`, then `Assign Teacher` with the teacher above (saves classId).\n4. `04 Provision → Students → Create Student` in that class (saves studentId, studentLoginId, studentTempPassword).\n5. `01 Auth → 10 Login - Teacher` before teacher requests; `11 Login - Student` before student requests.\nThen run this folder top to bottom: Timetable → Today Schedule → Class Info → Attendance.\n\nTimetable + today-schedule + class-info + attendance. Flow: admin creates timetable → teacher checks today-schedule → teacher marks attendance → student views own attendance.",
+			"item": [
+				{
+					"name": "Timetable",
+					"item": [
+						{
+							"name": "Create Timetable",
+							"request": {
+								"description": "Requires admin cookie — login via 01 Auth as an approved admin. Clash check: same teacher + day + overlapping [start,end) → 400. Saves periodId.",
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/timetables",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"timetables"
+									]
+								},
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"classId\": \"{{classId}}\",\n  \"subject\": \"Mathematics\",\n  \"teacherId\": \"{{teacherId}}\",\n  \"day\": \"Mon\",\n  \"startTime\": \"09:00\",\n  \"endTime\": \"10:00\",\n  \"room\": \"R1\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								}
+							},
+							"response": [],
+							"event": [
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"if (!pm.collectionVariables.get('classId')) { throw new Error('Missing classId — run 04 Provision Create Teacher + Create Class (+ Assign Teacher)'); }",
+											"if (!pm.collectionVariables.get('teacherId')) { throw new Error('Missing teacherId — run 04 Provision Create Teacher + Create Class (+ Assign Teacher)'); }"
+										]
+									}
+								},
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"const j = pm.response.json();",
+											"if (j.ok && j.data) { pm.collectionVariables.set('periodId', j.data.id); }"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "Clash - overlapping (expect 400)",
+							"request": {
+								"description": "Negative test: overlaps the slot above for the same teacher/day → 400. Exact boundary (10:00 start) is allowed.",
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/timetables",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"timetables"
+									]
+								},
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"classId\": \"{{classId}}\",\n  \"subject\": \"Extra\",\n  \"teacherId\": \"{{teacherId}}\",\n  \"day\": \"Mon\",\n  \"startTime\": \"09:30\",\n  \"endTime\": \"10:30\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "List Timetable - Admin",
+							"request": {
+								"description": "Requires admin cookie — login via 01 Auth as an approved admin. Try ?classId=&teacherId=&day=Mon.",
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/timetables?day=Mon",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"timetables"
+									],
+									"query": [
+										{
+											"key": "day",
+											"value": "Mon"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "List Timetable - Teacher",
+							"request": {
+								"description": "Requires teacher cookie — login via 01 Auth / 10 with T-XXXX or via 12 with phone. Teachers see only their own slots.",
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/timetables",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"timetables"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "List Timetable - Student",
+							"request": {
+								"description": "Login as student (11). Sees own class week incl. extra/cancelled overrides; classId param is ignored.",
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/timetables",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"timetables"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Update Timetable",
+							"request": {
+								"description": "Requires admin cookie — login via 01 Auth as an approved admin. Re-runs clash detection excluding self.",
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/timetables/{{periodId}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"timetables",
+										"{{periodId}}"
+									]
+								},
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"room\": \"R2\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Delete Timetable",
+							"request": {
+								"description": "Requires admin cookie — login via 01 Auth as an approved admin. Soft delete (active=false).",
+								"method": "DELETE",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/timetables/{{periodId}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"timetables",
+										"{{periodId}}"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Teacher Schedule",
+					"item": [
+						{
+							"name": "Today Schedule",
+							"request": {
+								"description": "Teacher only. Sorted LIVE → UPCOMING → DONE with per-slot state. Demo query (date=2026-09-28 Monday, now=09:30) matches the Mon 09:00–10:00 slot from `Create Timetable`, so it returns LIVE. Remove query params to use live server time. Requires teacher cookies (run `10 Login - Teacher` first).",
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/teacher/today-schedule?date=2026-09-28&now=09:30",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"teacher",
+										"today-schedule"
+									],
+									"query": [
+										{
+											"key": "date",
+											"value": "2026-09-28"
+										},
+										{
+											"key": "now",
+											"value": "09:30"
+										}
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Class Info",
+					"item": [
+						{
+							"name": "Post Extra Class Info",
+							"request": {
+								"description": "Requires teacher cookie — login via 01 Auth / 10 with T-XXXX or via 12 with phone. Own class only. Creates a class-scoped Notice (audience=class).",
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/teacher/class-info",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"teacher",
+										"class-info"
+									]
+								},
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"classId\": \"{{classId}}\",\n  \"title\": \"Extra maths class\",\n  \"body\": \"Saturday 10am in R1\",\n  \"type\": \"extra\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Post Cancelled Class Info",
+							"request": {
+								"description": "Requires teacher cookie — login via 01 Auth / 10 with T-XXXX or via 12 with phone. type=cancelled shows as override in student timetables.",
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/teacher/class-info",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"teacher",
+										"class-info"
+									]
+								},
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"classId\": \"{{classId}}\",\n  \"title\": \"No class Friday\",\n  \"body\": \"Sports day\",\n  \"type\": \"cancelled\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Attendance",
+					"item": [
+						{
+							"name": "Mark Attendance",
+							"request": {
+								"description": "Requires teacher cookie — login via 01 Auth / 10 with T-XXXX or via 12 with phone. (admin cookie also works). Every studentId must belong to the class. Saves attendanceId.",
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/attendance",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"attendance"
+									]
+								},
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"classId\": \"{{classId}}\",\n  \"date\": \"{{attendanceDate}}\",\n  \"periodId\": \"{{periodId}}\",\n  \"records\": [{ \"studentId\": \"{{studentId}}\", \"status\": \"present\" }]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								}
+							},
+							"response": [],
+							"event": [
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"const today = new Date().toISOString().slice(0, 10);",
+											"pm.collectionVariables.set('attendanceDate', today);",
+											"console.log('attendanceDate =', today);",
+											"if (!pm.collectionVariables.get('classId')) { throw new Error('Missing classId — run 06 Create Timetable + 04 Create Student first'); }",
+											"if (!pm.collectionVariables.get('periodId')) { throw new Error('Missing periodId — run 06 Create Timetable + 04 Create Student first'); }",
+											"if (!pm.collectionVariables.get('studentId')) { throw new Error('Missing studentId — run 06 Create Timetable + 04 Create Student first'); }"
+										]
+									}
+								},
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"const j = pm.response.json();",
+											"if (j.ok && j.data) { pm.collectionVariables.set('attendanceId', j.data.id); }"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "Upsert Same Day",
+							"request": {
+								"description": "Same class+period+date → updates the existing document (200), never duplicates.",
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/attendance",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"attendance"
+									]
+								},
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"classId\": \"{{classId}}\",\n  \"date\": \"{{attendanceDate}}\",\n  \"periodId\": \"{{periodId}}\",\n  \"records\": [{ \"studentId\": \"{{studentId}}\", \"status\": \"absent\" }]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								}
+							},
+							"response": [],
+							"event": [
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"const today = new Date().toISOString().slice(0, 10);",
+											"pm.collectionVariables.set('attendanceDate', today);",
+											"console.log('attendanceDate =', today);"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "Edit Today's Attendance",
+							"request": {
+								"description": "Requires teacher cookie — login via 01 Auth / 10 with T-XXXX or via 12 with phone. Same-calendar-day only.",
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/attendance/{{attendanceId}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"attendance",
+										"{{attendanceId}}"
+									]
+								},
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"records\": [{ \"studentId\": \"{{studentId}}\", \"status\": \"present\" }]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Edit Older Attendance - Expected 403",
+							"request": {
+								"description": "3-step 403 demo: 1) set collection variable attendanceDate to a past date (e.g. 2020-01-06). 2) Run `Mark Attendance` (creates an old record as admin). 3) Run THIS request with teacher cookies (run `10 Login - Teacher` first) → 403 'Only today\\'s attendance'. Admin editing the same ID → 200. Afterwards re-run Mark Attendance (pre-request resets attendanceDate to today).",
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/attendance/{{attendanceId}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"attendance",
+										"{{attendanceId}}"
+									]
+								},
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"records\": [{ \"studentId\": \"{{studentId}}\", \"status\": \"present\" }]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "My Attendance",
+							"request": {
+								"description": "Login as student (11). Day list + percent (present/recorded*100, unrecorded days ignored). Try ?month=2026-09. Month auto-set to the current YYYY-MM by pre-request script, so it matches the attendance you just marked.",
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/students/me/attendance?month={{attendanceMonth}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"students",
+										"me",
+										"attendance"
+									],
+									"query": [
+										{
+											"key": "month",
+											"value": "{{attendanceMonth}}"
+										}
+									]
+								}
+							},
+							"response": [],
+							"event": [
+								{
+									"listen": "prerequest",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"const m = new Date().toISOString().slice(0, 7);",
+											"pm.collectionVariables.set('attendanceMonth', m);",
+											"console.log('attendanceMonth =', m);"
+										]
+									}
+								}
+							]
+						},
+						{
+							"name": "Cross-Class - Expected 403",
+							"request": {
+								"description": "Negative test: teacher marks a class they don't own → 403.",
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/attendance",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"attendance"
+									]
+								},
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"classId\": \"{{classId}}\",\n  \"date\": \"{{attendanceDate}}\",\n  \"periodId\": \"{{periodId}}\",\n  \"records\": [{ \"studentId\": \"{{studentId}}\", \"status\": \"present\" }]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
 								}
 							},
 							"response": []

@@ -1,5 +1,7 @@
 import { Types } from "mongoose";
+import { AuditLog } from "../models/AuditLog.js";
 import { Class } from "../models/Class.js";
+import { Notice } from "../models/Notice.js";
 import { User } from "../models/User.js";
 import { toClassPayload } from "./class.service.js";
 import { createStudent, sanitizeUser, type CreateStudentInput } from "./user.service.js";
@@ -85,4 +87,35 @@ export async function createStudentInOwnClass(teacherId: string, instituteId: st
     throw ApiError.forbidden("You can only add students to your own classes");
   }
   return createStudent(teacherId, instituteId, input);
+}
+
+// ---------------------------------------------------------------------------
+// 4. Class info — extra/cancelled announcement for the teacher's own class.
+// ---------------------------------------------------------------------------
+export interface ClassInfoInput {
+  classId: string;
+  title: string;
+  body: string;
+  type: "extra" | "cancelled";
+}
+
+export async function postClassInfo(teacherId: string, instituteId: string, input: ClassInfoInput) {
+  const klass = await requireOwnedClass(input.classId, teacherId, instituteId);
+  const notice = await Notice.create({
+    instituteId: new Types.ObjectId(instituteId),
+    classId: klass._id,
+    title: input.title.trim(),
+    body: input.body.trim(),
+    audience: "class",
+    type: input.type,
+    createdBy: new Types.ObjectId(teacherId),
+  });
+  await AuditLog.create({ by: teacherId, instituteId, action: "class-info.posted" });
+  return {
+    id: String(notice._id),
+    classId: String(klass._id),
+    title: notice.title,
+    body: notice.body,
+    type: notice.type,
+  };
 }

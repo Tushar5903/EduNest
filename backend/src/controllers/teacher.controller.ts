@@ -35,3 +35,12 @@ export async function createStudent(req: Request, res: Response, next: NextFunct
     next(err);
   }
 }
+
+export async function postClassInfo(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { teacherId, instituteId } = ctx(req);
+    created(res, await teacherService.postClassInfo(teacherId, instituteId, req.body));
+  } catch (err) {
+    next(err);
+  }
+}
