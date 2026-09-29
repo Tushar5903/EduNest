@@ -17,6 +17,9 @@ import attendanceRoutes from "./routes/attendance.routes.js";
 import studentRoutes from "./routes/student.routes.js";
 import complaintRoutes from "./routes/complaint.routes.js";
 import feeRoutes from "./routes/fee.routes.js";
+import salaryRoutes from "./routes/salary.routes.js";
+import promoteRoutes from "./routes/promote.routes.js";
+import reportsRoutes from "./routes/reports.routes.js";
 import testRoutes from "./routes/test.routes.js";
 import noticeRoutes from "./routes/notice.routes.js";
 
@@ -44,6 +47,9 @@ export function createApp() {
   app.use("/api/students", studentRoutes);
   app.use("/api/complaints", complaintRoutes);
   app.use("/api/fees", feeRoutes);
+  app.use("/api/salary", salaryRoutes);
+  app.use("/api/promote", promoteRoutes);
+  app.use("/api/admin/reports", reportsRoutes);
   app.use("/api/notices", noticeRoutes);
   // Tests + results share one router (plan §9): /api/tests + /api/results.
   app.use("/api", testRoutes);

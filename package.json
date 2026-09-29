@@ -1,0 +1,26 @@
+{
+  "name": "edunest",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/portal",
+    "apps/console",
+    "packages/shared",
+    "backend"
+  ],
+  "scripts": {
+    "dev:server": "npm run dev --workspace=@edunest/server",
+    "dev:portal": "npm run dev --workspace=@edunest/portal",
+    "dev:console": "npm run dev --workspace=@edunest/console",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspace=@edunest/server",
+    "smoke": "node scripts/smoke.mjs",
+    "lint": "npm run lint --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20 <23",
+    "npm": ">=10"
+  }
+}
