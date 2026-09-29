@@ -15,6 +15,10 @@ import teacherRoutes from "./routes/teacher.routes.js";
 import timetableRoutes from "./routes/timetable.routes.js";
 import attendanceRoutes from "./routes/attendance.routes.js";
 import studentRoutes from "./routes/student.routes.js";
+import complaintRoutes from "./routes/complaint.routes.js";
+import feeRoutes from "./routes/fee.routes.js";
+import testRoutes from "./routes/test.routes.js";
+import noticeRoutes from "./routes/notice.routes.js";
 
 export function createApp() {
   const app = express();
@@ -38,6 +42,11 @@ export function createApp() {
   app.use("/api/timetables", timetableRoutes);
   app.use("/api/attendance", attendanceRoutes);
   app.use("/api/students", studentRoutes);
+  app.use("/api/complaints", complaintRoutes);
+  app.use("/api/fees", feeRoutes);
+  app.use("/api/notices", noticeRoutes);
+  // Tests + results share one router (plan §9): /api/tests + /api/results.
+  app.use("/api", testRoutes);
 
   app.use("/api", notFound);
   app.use(errorHandler);

@@ -14,6 +14,8 @@ import {
   setTerminalClass,
   updateUser,
 } from "../controllers/admin.controller.js";
+import { adminInbox } from "../controllers/complaint.controller.js";
+import { feeAudit, listFees } from "../controllers/fee.controller.js";
 import { protect } from "../middleware/auth.middleware.js";
 import { checkStatus } from "../middleware/status.middleware.js";
 import { allowRoles } from "../middleware/role.middleware.js";
@@ -53,5 +55,10 @@ router.patch("/classes/:id/teacher", validateBody(assignClassTeacherValidator), 
 router.post("/classes/:id/resequence-roll", resequenceRoll);
 
 router.patch("/settings/terminal-class", validateBody(terminalClassValidator), setTerminalClass);
+
+// Plan §11/§14 read aliases (same handlers as /api/fees + /api/complaints/admin).
+router.get("/complaints", adminInbox);
+router.get("/fees", listFees);
+router.get("/fees/:id/audit", feeAudit);
 
 export default router;

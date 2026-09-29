@@ -1,5 +1,7 @@
 import { Router } from "express";
 import { createStudent, getClassDashboard, getMyClasses, postClassInfo } from "../controllers/teacher.controller.js";
+import { teacherInbox } from "../controllers/complaint.controller.js";
+import { teacherFeeStatus } from "../controllers/fee.controller.js";
 import { todaySchedule } from "../controllers/timetable.controller.js";
 import { protect } from "../middleware/auth.middleware.js";
 import { checkStatus } from "../middleware/status.middleware.js";
@@ -9,6 +11,7 @@ import { validateBody, validateQuery } from "../middleware/validation.middleware
 import { teacherCreateStudentValidator } from "../validators/teacher.validator.js";
 import { todayScheduleQueryValidator } from "../validators/timetable.validator.js";
 import { classInfoValidator } from "../validators/notice.validator.js";
+import { teacherFeeStatusValidator } from "../validators/fee.validator.js";
 
 const router = Router();
 
@@ -21,5 +24,8 @@ router.get("/classes/:id/dashboard", getClassDashboard);
 router.post("/students", validateBody(teacherCreateStudentValidator), createStudent);
 router.get("/today-schedule", validateQuery(todayScheduleQueryValidator), todaySchedule);
 router.post("/class-info", validateBody(classInfoValidator), postClassInfo);
+// Plan §11/§14 aliases: same handlers as /api/fees/teacher/:id/status + /api/complaints/teacher.
+router.patch("/fees/:id/status", validateBody(teacherFeeStatusValidator), teacherFeeStatus);
+router.get("/complaints", teacherInbox);
 
 export default router;
