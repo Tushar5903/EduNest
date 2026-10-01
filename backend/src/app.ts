@@ -22,6 +22,7 @@ import promoteRoutes from "./routes/promote.routes.js";
 import reportsRoutes from "./routes/reports.routes.js";
 import testRoutes from "./routes/test.routes.js";
 import noticeRoutes from "./routes/notice.routes.js";
+import auditRoutes from "./routes/audit.routes.js";
 
 export function createApp() {
   const app = express();
@@ -51,6 +52,7 @@ export function createApp() {
   app.use("/api/promote", promoteRoutes);
   app.use("/api/admin/reports", reportsRoutes);
   app.use("/api/notices", noticeRoutes);
+  app.use("/api/audit-logs", auditRoutes);
   // Tests + results share one router (plan §9): /api/tests + /api/results.
   app.use("/api", testRoutes);
 

@@ -17,7 +17,8 @@ export async function login(identifier: string, password: string): Promise<Sessi
   if (!identifier.includes("@")) {
     throw new Error("Use portal login for ID accounts");
   }
-  return apiPost<SessionUser>("/auth/login", { identifier: identifier.trim(), password });
+  const response = await apiPost<{ user: SessionUser }>("/auth/login", { identifier: identifier.trim(), password });
+  return response.user;
 }
 
 export async function requestAccess(input: {

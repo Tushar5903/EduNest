@@ -19,11 +19,10 @@ export function middleware(req: NextRequest) {
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
-  if (hasSession && (pathname === "/login" || pathname === "/request-access")) {
-    const url = req.nextUrl.clone();
-    url.pathname = "/";
-    return NextResponse.redirect(url);
-  }
+  // NOTE: no authed redirect for /login or /request-access here.
+  // Middleware only sees cookie presence, not role, so forcing
+  // /login -> / while app/page.tsx redirects / -> /login created an
+  // infinite loop. Let the client resolve the role home instead.
   const res = NextResponse.next();
   res.headers.set("X-Robots-Tag", "noindex, nofollow");
   return res;

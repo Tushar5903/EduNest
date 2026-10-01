@@ -1,49 +1,24 @@
 "use client";
 
+import { zodResolver } from "@hookform/resolvers/zod";
+import { ArrowLeft, ArrowRight, Check, LockKeyhole, Mail, Phone, UserRound } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { toast } from "sonner";
 import { adminRequestSchema, type AdminRequestInput } from "@edunest/shared";
 import { requestAccess } from "@/lib/auth";
-import { toast } from "sonner";
 
 export default function RequestAccessPage() {
   const router = useRouter();
   const [pending, setPending] = useState(false);
-  const form = useForm<AdminRequestInput>({
-    resolver: zodResolver(adminRequestSchema),
-    defaultValues: { name: "", email: "", password: "", schoolName: "", address: "", phone: "" },
-  });
-
+  const form = useForm<AdminRequestInput>({ resolver: zodResolver(adminRequestSchema), defaultValues: { name: "", email: "", password: "", schoolName: "", address: "", phone: "" } });
   async function onSubmit(values: AdminRequestInput) {
     setPending(true);
-    try {
-      await requestAccess(values);
-      toast.success("Request submitted — pending super-admin approval");
-      router.replace("/login");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Request failed");
-    } finally {
-      setPending(false);
-    }
+    try { await requestAccess(values); toast.success("Registration submitted for approval"); router.replace("/login"); } catch (error) { toast.error(error instanceof Error ? error.message : "Registration failed"); } finally { setPending(false); }
   }
-
-  return (
-    <div className="mx-auto w-full max-w-md py-10">
-      <h1 className="font-display text-2xl font-bold">Request admin access</h1>
-      <p className="mt-1 text-sm text-[#78716C]">Creates a pending institute + admin. No login until approved.</p>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="mt-4 flex flex-col gap-3">
-        <input {...form.register("name")} placeholder="Your name" className="rounded-xl border p-3" />
-        <input {...form.register("email")} placeholder="Email" className="rounded-xl border p-3" />
-        <input {...form.register("password")} type="password" placeholder="Password (min 8)" className="rounded-xl border p-3" />
-        <input {...form.register("schoolName")} placeholder="School name" className="rounded-xl border p-3" />
-        <input {...form.register("address")} placeholder="Address (optional)" className="rounded-xl border p-3" />
-        <input {...form.register("phone")} placeholder="Phone (optional)" className="rounded-xl border p-3" />
-        <button disabled={pending} className="rounded-xl bg-[#EA580C] p-3 font-medium text-white hover:bg-[#C2410C] disabled:opacity-60">
-          {pending ? "Submitting…" : "Submit request"}
-        </button>
-      </form>
-    </div>
-  );
+  return <main className="min-h-screen bg-[#f3f4fb] px-4 py-4 sm:px-8 lg:grid lg:place-items-center"><div className="mx-auto w-full max-w-[960px] overflow-hidden rounded-xl bg-white shadow-[0_14px_40px_rgba(34,32,94,0.1)] ring-1 ring-[#e2e3f0]"><header className="bg-[#12124c] px-6 py-5 text-white sm:px-8"><div className="flex items-start justify-between gap-6"><div><div className="mb-2 inline-flex items-center gap-2 rounded bg-[#25245f] px-2.5 py-1 text-[10px] font-semibold"><span className="h-1.5 w-1.5 rounded-full bg-[#24c998]" />Institution registration</div><h1 className="font-display text-2xl font-bold tracking-tight">Create Your School Account</h1><p className="mt-1 text-xs text-[#c7c6ed]">Register your institution and set up the primary administrative credentials.</p></div><div className="hidden text-right text-[10px] text-[#c7c6ed] sm:block"><div>Secure onboarding</div><div className="mt-1 inline-flex items-center gap-2 font-semibold text-white"><span className="h-1.5 w-1.5 rounded-full bg-[#24c998]" />Instant cloud access</div></div></div></header><form onSubmit={form.handleSubmit(onSubmit)} className="px-6 py-7 sm:px-8 sm:py-8"><div className="grid gap-x-5 gap-y-5 sm:grid-cols-2"><FormField label="Full name" required error={form.formState.errors.name?.message}><div className="relative"><UserRound className="absolute left-3 top-3 text-[#8d8bab]" size={15} /><input {...form.register("name")} placeholder="Your full name" className="auth-input pl-9" /></div></FormField><FormField label="Institutional email" required error={form.formState.errors.email?.message}><div className="relative"><Mail className="absolute left-3 top-3 text-[#8d8bab]" size={15} /><input {...form.register("email")} type="email" placeholder="admin@school.edu" className="auth-input pl-9" /></div></FormField><FormField label="Password" required error={form.formState.errors.password?.message}><div className="relative"><LockKeyhole className="absolute left-3 top-3 text-[#8d8bab]" size={15} /><input {...form.register("password")} type="password" placeholder="Create a secure password" className="auth-input pl-9" /></div></FormField><FormField label="Contact mobile number" error={form.formState.errors.phone?.message}><div className="relative"><Phone className="absolute left-3 top-3 text-[#8d8bab]" size={15} /><input {...form.register("phone")} placeholder="Optional phone number" className="auth-input pl-9" /></div></FormField><div className="sm:col-span-2"><FormField label="School / institution name" required error={form.formState.errors.schoolName?.message}><input {...form.register("schoolName")} placeholder="Official institution name" className="auth-input" /></FormField></div><div className="sm:col-span-2"><FormField label="Campus street address" error={form.formState.errors.address?.message}><input {...form.register("address")} placeholder="Campus address" className="auth-input" /></FormField></div></div><label className="mt-5 flex cursor-pointer items-start gap-3 rounded-lg bg-[#f5f4ff] p-3 text-xs leading-5 text-[#696781]"><input type="checkbox" required className="mt-1 accent-[#29285f]" /><span>I certify that I am an authorized representative of this educational institution. I agree to the <span className="font-semibold text-[#38366f] underline">EduNest Master Services Agreement</span> and <span className="font-semibold text-[#38366f] underline">Student Data Privacy Framework</span>.</span></label><div className="mt-7 flex flex-col-reverse justify-between gap-4 border-t border-[#eeeefa] pt-5 sm:flex-row sm:items-center"><Link href="/login" className="inline-flex items-center gap-2 text-xs font-semibold text-[#555282]"><ArrowLeft size={14} />Already registered? Sign in</Link><button disabled={pending} className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#29285f] px-5 py-3 text-xs font-semibold text-white shadow-[0_4px_8px_rgba(41,40,95,0.2)] hover:bg-[#1f1e52] disabled:opacity-60">{pending ? "Submitting…" : "Register school"}<ArrowRight size={15} /></button></div></form><footer className="flex flex-wrap justify-center gap-x-6 gap-y-2 border-t border-[#eeeefa] px-5 py-4 text-[10px] text-[#777792]"><span className="inline-flex items-center gap-1"><Check size={12} className="text-[#149b79]" />Encrypted infrastructure</span><span className="inline-flex items-center gap-1"><Check size={12} className="text-[#149b79]" />Privacy compliant</span><span className="inline-flex items-center gap-1"><Check size={12} className="text-[#149b79]" />Automated cloud backups</span></footer></div></main>;
 }
+
+function FormField({ label, required, error, children }: { label: string; required?: boolean; error?: string; children: React.ReactNode }) { return <label className="block text-[11px] font-semibold text-[#17164b]"><span>{label}{required ? <span className="ml-1 text-[#c8324d]">*</span> : null}</span>{children}{error ? <span className="mt-1 block font-normal text-[#b22c43]">{error}</span> : null}</label>; }

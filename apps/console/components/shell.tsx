@@ -1,91 +1,110 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
+import { Bell, Building2, ChevronDown, ClipboardList, Grid2X2, GraduationCap, History, LogOut, Menu, PanelLeftClose, Search, ShieldCheck, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { getMe, logout, type SessionUser } from "@/lib/auth";
-import { useNow } from "@/lib/useNow";
-
-const ADMIN_NAV = [
-  { href: "/admin/dashboard", label: "Dashboard" },
-  { href: "/admin/students", label: "Students" },
-  { href: "/admin/teachers", label: "Teachers" },
-  { href: "/admin/classes", label: "Classes" },
-  { href: "/admin/timetable", label: "Timetable" },
-  { href: "/admin/attendance", label: "Attendance" },
-  { href: "/admin/fees", label: "Fees" },
-  { href: "/admin/salary", label: "Salary" },
-  { href: "/admin/notices", label: "Notices" },
-  { href: "/admin/complaints", label: "Complaints" },
-  { href: "/admin/reports/school", label: "Reports" },
-  { href: "/admin/settings", label: "Settings" },
-];
+import { useEffect, useRef, useState } from "react";
+import { logout } from "@/lib/auth";
+import { getSessionUser, listRequests, type SessionUser } from "@/lib/super";
 
 const SUPER_NAV = [
-  { href: "/super/dashboard", label: "Dashboard" },
-  { href: "/super/requests", label: "Approvals" },
-  { href: "/super/institutes", label: "Directory" },
-  { href: "/super/audit", label: "Audit" },
+  { href: "/super/dashboard", label: "Dashboard", icon: Grid2X2 },
+  { href: "/super/requests", label: "Requests", icon: ClipboardList },
+  { href: "/super/institutes", label: "Institutes", icon: Building2 },
+  { href: "/super/audit", label: "Audit Logs", icon: History },
+];
+
+const ADMIN_NAV = [
+  { href: "/admin/dashboard", label: "Dashboard", icon: Grid2X2 },
+  { href: "/admin/students", label: "Students", icon: ClipboardList },
+  { href: "/admin/teachers", label: "Teachers", icon: ClipboardList },
+  { href: "/admin/classes", label: "Classes", icon: Building2 },
+  { href: "/admin/timetable", label: "Timetable", icon: ClipboardList },
+  { href: "/admin/attendance", label: "Attendance", icon: ClipboardList },
+  { href: "/admin/fees", label: "Fees", icon: ClipboardList },
+  { href: "/admin/salary", label: "Salary", icon: ClipboardList },
+  { href: "/admin/notices", label: "Notices", icon: ClipboardList },
+  { href: "/admin/complaints", label: "Complaints", icon: ClipboardList },
+  { href: "/admin/reports/school", label: "Reports", icon: History },
+  { href: "/admin/settings", label: "Settings", icon: ShieldCheck },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const now = useNow();
   const [user, setUser] = useState<SessionUser | null>(null);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  const [logoutOpen, setLogoutOpen] = useState(false);
+  const checkedPath = useRef<string | null>(null);
+  const pendingRequests = useQuery({ queryKey: ["super", "requests", "pending"], queryFn: () => listRequests("pending"), enabled: user?.role === "super-admin" });
 
   useEffect(() => {
     if (pathname === "/login" || pathname === "/request-access") return;
-    getMe()
-      .then((u) => {
-        if (u.role !== "admin" && u.role !== "super-admin") {
-          router.replace("/login?error=use-portal");
-          return;
-        }
-        setUser(u);
-      })
-      .catch(() => router.replace("/login"));
+    if (checkedPath.current === pathname) return;
+    checkedPath.current = pathname;
+    getSessionUser().then((current) => {
+      if (current.role !== "admin" && current.role !== "super-admin") {
+        checkedPath.current = null;
+        router.replace("/login?error=use-portal");
+        return;
+      }
+      setUser(current);
+    }).catch(() => {
+      checkedPath.current = null;
+      router.replace("/login");
+    });
   }, [pathname, router]);
+
+  useEffect(() => {
+    if (pathname === "/login" || pathname === "/request-access") return;
+    const title = pathname === "/super/institutes/new"
+      ? "Manual Filing"
+      : pathname.startsWith("/super/institutes/")
+        ? "Institute Profile"
+        : pathname.includes("/dashboard")
+          ? "Dashboard"
+          : pathname.split("/").filter(Boolean).at(-1)?.replaceAll("-", " ") ?? "Console";
+    document.title = `${title.replace(/\b\w/g, (character) => character.toUpperCase())} · EduNest Console`;
+  }, [pathname]);
 
   if (pathname === "/login" || pathname === "/request-access") return <>{children}</>;
 
   const nav = user?.role === "super-admin" ? SUPER_NAV : ADMIN_NAV;
+  const isSuper = user?.role === "super-admin" || pathname.startsWith("/super");
+  const sidebarWidth = collapsed ? "lg:pl-[78px]" : "lg:pl-[300px]";
+  const pageTitle = pathname === "/super/institutes/new"
+    ? "Manual Filing"
+    : pathname.startsWith("/super/institutes/")
+      ? "Institute Profile"
+      : nav.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))?.label ?? "Dashboard";
 
-  return (
-    <div className="flex min-h-screen flex-col bg-white">
-      <header className="flex items-center justify-between bg-[#EA580C] px-4 py-3 text-white">
-        <div className="flex items-center gap-2">
-          <span className="font-display text-lg font-bold">EduNest Console</span>
-          <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs">{user?.role ?? "console"}</span>
-        </div>
-        <div className="flex items-center gap-3 text-sm">
-          <span className="tabular-nums">{now.toLocaleString()}</span>
-          {user ? (
-            <button
-              className="rounded-lg bg-white/15 px-2 py-1"
-              onClick={() => logout().then(() => router.replace("/login"))}
-            >
-              Logout
-            </button>
-          ) : null}
-        </div>
-      </header>
-      <div className="flex flex-1">
-        <aside className="hidden w-60 shrink-0 border-r border-[#F5F5F4] bg-white p-3 lg:block">
-          <nav className="flex flex-col gap-1">
-            {nav.map((n) => (
-              <Link
-                key={n.href}
-                href={n.href}
-                className={`rounded-lg px-3 py-2 text-sm ${pathname === n.href ? "bg-[#FFF7ED] font-medium text-[#EA580C]" : "text-[#1C1917] hover:bg-[#FFF7ED]"}`}
-              >
-                {n.label}
-              </Link>
-            ))}
-          </nav>
-        </aside>
-        <main className="flex-1 bg-white p-4">{children}</main>
-      </div>
+  function navigation(mobile = false) {
+    return nav.map(({ href, label, icon: Icon }) => {
+      const active = pathname === href || (href !== "/super/dashboard" && pathname.startsWith(`${href}/`));
+      const badge = label === "Requests" && pendingRequests.data ? pendingRequests.data.length : null;
+      return <Link key={href} href={href} onClick={() => mobile && setMobileOpen(false)} className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium transition ${active ? "bg-[#302d6d] text-white shadow-[inset_3px_0_0_#bab8ff]" : "text-[#aaa8d0] hover:bg-white/10 hover:text-white"}`}><Icon size={19} />{!collapsed || mobile ? <span>{label}</span> : null}{badge !== null && (!collapsed || mobile) ? <span className="ml-auto rounded bg-white px-2 py-0.5 text-xs font-bold text-[#201e59]">{badge}</span> : null}</Link>;
+    });
+  }
+
+  async function confirmLogout() {
+    await logout();
+    setLogoutOpen(false);
+    router.replace("/login");
+  }
+
+  return <div className="min-h-screen bg-[#f6f4ff] text-[#17164b]">
+    <aside className={`fixed inset-y-0 left-0 z-40 hidden flex-col bg-[#12113f] text-white transition-all lg:flex ${collapsed ? "w-[78px]" : "w-[300px]"}`}>
+      <div className="relative flex h-[78px] items-center gap-3 border-b border-white/10 px-5"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#2e2b6e]"><GraduationCap size={22} /></div>{!collapsed ? <div><div className="font-display text-xl font-bold tracking-tight">EduNest</div><div className="text-xs font-semibold tracking-[0.16em] text-[#a9a7d2]">{isSuper ? "SUPER ADMIN" : "ADMIN CONSOLE"}</div></div> : null}<button aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={() => setCollapsed((value) => !value)} className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#302d6d] text-[#f4f3ff] shadow-sm ring-1 ring-white/20 transition hover:bg-[#403d85] hover:text-white ${collapsed ? "absolute -right-8 top-5 z-50" : "ml-auto"}`}><PanelLeftClose size={18} className={collapsed ? "rotate-180" : ""} /></button></div>
+      <nav className="flex flex-1 flex-col gap-1 px-3 py-6">{navigation()}</nav>
+      <button type="button" aria-label="Open account actions" onClick={() => setLogoutOpen(true)} className={`m-3 rounded-xl bg-[#211f5c] p-3 text-left transition hover:bg-[#2a2870] ${collapsed ? "flex justify-center" : ""}`}><div className="flex items-center gap-3"><div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#d8d7f6] text-sm font-bold text-[#27255e]">{user?.name?.slice(0, 1).toUpperCase() ?? "S"}</div>{!collapsed ? <div className="min-w-0"><div className="truncate text-sm font-semibold">{user?.name ?? "Super Admin"}</div><div className="text-xs text-[#aaa8d0]">{user?.role ?? "super-admin"}</div></div> : null}<ChevronDown size={17} className={`${collapsed ? "hidden" : "ml-auto"} text-[#aaa8d0]`} /></div></button>
+    </aside>
+    <div className={`${sidebarWidth} transition-all`}>
+      <header className="sticky top-0 z-30 flex h-[78px] items-center gap-4 border-b border-[#e7e4f5] bg-white/95 px-4 backdrop-blur sm:px-7"><button aria-label="Open navigation" onClick={() => setMobileOpen(true)} className="rounded-lg p-2 hover:bg-[#f3f1ff] lg:hidden"><Menu size={21} /></button><div className="hidden shrink-0 items-center gap-3 text-sm font-semibold text-[#686681] md:flex"><span className="text-[#8b89a7]">EDUNEST</span><span>›</span><span className="text-[#1b194b]">{pageTitle}</span></div><div className="relative mx-auto flex w-full max-w-[520px] flex-1 items-center"><Search className="absolute left-3 text-[#85829f]" size={18} /><input aria-label="Global search" placeholder="Search institutes, requests, admin logs…" className="h-11 w-full rounded-lg bg-[#f3f1fc] pl-10 pr-3 text-sm outline-none ring-[#cbc8f3] placeholder:text-[#85829f] focus:ring-2" /></div><div className="hidden shrink-0 items-center gap-3 sm:flex"><span className="rounded-md bg-[#f0efff] px-3 py-2 text-xs font-semibold text-[#26235e]"><span className="mr-2 inline-block h-2 w-2 rounded-full bg-[#5f5c9a]" />Platform: Operational</span><button aria-label="Notifications" className="rounded-lg p-2 hover:bg-[#f3f1ff]"><Bell size={18} /></button><button aria-label="Security" className="rounded-lg p-2 hover:bg-[#f3f1ff]"><ShieldCheck size={18} /></button></div><button type="button" aria-label="Open account actions" onClick={() => setLogoutOpen(true)} className="flex shrink-0 items-center gap-2 rounded-lg p-1.5 text-left transition hover:bg-[#f3f1ff]"><div className="grid h-9 w-9 place-items-center rounded-full bg-[#d9d7ef] text-sm font-bold">{user?.name?.slice(0, 1).toUpperCase() ?? "S"}</div><div className="hidden sm:block"><div className="text-sm font-semibold leading-4">{user?.name ?? "Super Admin"}</div><div className="text-xs text-[#77748d]">Root Authority</div></div><ChevronDown size={16} className="hidden sm:block" /></button></header>
+      <main className="min-h-[calc(100vh-78px)] px-4 py-5 sm:px-7 lg:px-8">{children}</main>
     </div>
-  );
+    {mobileOpen ? <div className="fixed inset-0 z-50 bg-[#12113f]/60 lg:hidden" onClick={() => setMobileOpen(false)}><aside className="h-full w-[280px] bg-[#12113f] p-4 text-white" onClick={(event) => event.stopPropagation()}><div className="mb-8 flex items-center justify-between"><div className="font-display text-xl font-bold">EduNest</div><button aria-label="Close navigation" onClick={() => setMobileOpen(false)}><X /></button></div><nav className="flex flex-col gap-1">{navigation(true)}</nav></aside></div> : null}
+    {logoutOpen ? <div className="fixed inset-0 z-[60] grid place-items-center bg-[#0d0c31]/55 p-4" role="presentation"><section role="dialog" aria-modal="true" aria-labelledby="logout-title" className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl"><div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-[#f0efff] text-[#29285f]"><LogOut size={21} /></div><h2 id="logout-title" className="mt-4 text-center font-display text-xl font-bold">Sign out of EduNest?</h2><p className="mt-2 text-center text-sm leading-6 text-[#77748d]">Your current console session will be closed on this device.</p><div className="mt-6 flex gap-3"><button type="button" onClick={() => setLogoutOpen(false)} className="flex-1 rounded-lg bg-[#f0efff] px-4 py-3 text-sm font-semibold text-[#29285f]">Cancel</button><button type="button" onClick={() => void confirmLogout()} className="flex-1 rounded-lg bg-[#29285f] px-4 py-3 text-sm font-semibold text-white">Sign out</button></div></section></div> : null}
+  </div>;
 }
