@@ -4,7 +4,8 @@ export interface ClassDoc extends Document {
   instituteId: Schema.Types.ObjectId;
   name: string;
   section?: string;
-  standard?: number;
+  standard?: string;
+  feeAmount: number;
   teacherId?: Schema.Types.ObjectId | null;
   academicYear: string;
   /** Position in the promotion chain (1 = lowest). Used by promote validation. */
@@ -19,7 +20,8 @@ const classSchema = new Schema<ClassDoc>(
     instituteId: { type: Schema.Types.ObjectId, ref: "Institute", required: true, immutable: true, index: true },
     name: { type: String, required: true, trim: true },
     section: { type: String, trim: true },
-    standard: { type: Number, min: 1 },
+    standard: { type: String, trim: true },
+    feeAmount: { type: Number, min: 0, default: 800 },
     teacherId: { type: Schema.Types.ObjectId, ref: "User", default: null },
     academicYear: { type: String, required: true, trim: true },
     order: { type: Number, required: true, min: 1 },

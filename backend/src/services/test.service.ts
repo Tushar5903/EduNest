@@ -30,9 +30,10 @@ export async function createTest(actor: { id: string; role: string }, instituteI
 export async function listTests(instituteId: string, query: { classId?: string; subject?: string }, viewer: { role: string; id: string }) {
   const filter: Record<string, unknown> = { instituteId: new Types.ObjectId(instituteId) };
   if (viewer.role === "student") {
-    const me = await User.findById(viewer.id).select("classId");
-    if (!me?.classId) return [];
-    filter.classId = me.classId;
+    const me = await User.findById(viewer.id).select("classId classIds");
+    const studentClassIds = [me?.classId, ...(Array.isArray(me?.classIds) ? me.classIds : [])].filter(Boolean).map(String);
+    if (!studentClassIds.length) return [];
+    filter.classId = { $in: studentClassIds.map((id) => new Types.ObjectId(id)) };
   } else if (viewer.role === "teacher") {
     const { Class } = await import("../models/Class.js");
     const owned = await Class.find({ teacherId: new Types.ObjectId(viewer.id), instituteId: new Types.ObjectId(instituteId) }).select("_id");
@@ -62,10 +63,11 @@ export async function saveMarks(actor: { id: string; role: string }, instituteId
   for (const m of marks) {
     assertObjectId(m.studentId);
     if (m.marks > test.maxMarks) throw ApiError.badRequest(`marks must not exceed maxMarks ${test.maxMarks}`);
-    const s = await User.findById(m.studentId).select("classId instituteId role active");
+    const s = await User.findById(m.studentId).select("classId classIds instituteId role active");
     if (!s || s.role !== "student" || !s.active) throw ApiError.badRequest("Invalid student in marks");
     if (!s.instituteId || String(s.instituteId) !== instituteId) throw ApiError.forbidden("Cross-institute access denied");
-    if (!s.classId || String(s.classId) !== String(test.classId)) throw ApiError.badRequest("Student does not belong to this class");
+    const studentClassIds = [s.classId, ...(Array.isArray(s.classIds) ? s.classIds : [])].filter(Boolean).map(String);
+    if (!studentClassIds.includes(String(test.classId))) throw ApiError.badRequest("Student does not belong to this class");
   }
   await TestMark.bulkWrite(
     marks.map((m) => ({
@@ -83,10 +85,11 @@ export async function publishResult(actor: { id: string; role: string }, institu
   if (actor.role === "teacher") await requireOwnedClassForTeacher(input.classId, actor.id, instituteId);
   else await requireClassInInstitute(input.classId, instituteId);
   assertObjectId(input.studentId);
-  const s = await User.findById(input.studentId).select("classId instituteId role active");
+  const s = await User.findById(input.studentId).select("classId classIds instituteId role active");
   if (!s || s.role !== "student" || !s.active) throw ApiError.badRequest("Invalid student");
   if (!s.instituteId || String(s.instituteId) !== instituteId) throw ApiError.forbidden("Cross-institute access denied");
-  if (!s.classId || String(s.classId) !== input.classId) throw ApiError.badRequest("Student does not belong to this class");
+  const studentClassIds = [s.classId, ...(Array.isArray(s.classIds) ? s.classIds : [])].filter(Boolean).map(String);
+  if (!studentClassIds.includes(input.classId)) throw ApiError.badRequest("Student does not belong to this class");
   const { Class } = await import("../models/Class.js");
   const teachers = await User.find({ instituteId: new Types.ObjectId(instituteId), role: "teacher", active: true }).select("subject").lean();
   void teachers;
@@ -111,7 +114,7 @@ export interface StudentResultRow {
 
 /** Student read-only aggregates for bar/pie charts. Teacher/class joined per subject where known. */
 export async function myResults(studentId: string, instituteId: string, exam?: string) {
-  const me = await User.findById(studentId).select("classId");
+  const me = await User.findById(studentId).select("classId classIds");
   const filter: Record<string, unknown> = {
     instituteId: new Types.ObjectId(instituteId),
     studentId: new Types.ObjectId(studentId),
@@ -119,7 +122,7 @@ export async function myResults(studentId: string, instituteId: string, exam?: s
   if (exam) filter.exam = exam;
   const rows = await Result.find(filter).sort({ createdAt: -1 }).lean();
   const { Timetable } = await import("../models/Timetable.js");
-  const classId = me?.classId ? String(me.classId) : null;
+  const classId = me?.classId ? String(me.classId) : Array.isArray(me?.classIds) && me.classIds.length ? String(me.classIds[0]) : null;
   let subjectTeacher: Record<string, string> = {};
   if (classId) {
     const slots = await Timetable.find({ instituteId: new Types.ObjectId(instituteId), classId: new Types.ObjectId(classId), active: true }).lean();

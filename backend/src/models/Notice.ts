@@ -10,6 +10,7 @@ export type NoticeType = "general" | "extra" | "cancelled";
 export interface NoticeDoc extends Document {
   instituteId: Schema.Types.ObjectId;
   classId?: Schema.Types.ObjectId | null;
+  classIds?: Schema.Types.ObjectId[];
   title: string;
   body: string;
   audience: NoticeAudience;
@@ -24,6 +25,7 @@ const noticeSchema = new Schema<NoticeDoc>(
   {
     instituteId: { type: Schema.Types.ObjectId, ref: "Institute", required: true, immutable: true, index: true },
     classId: { type: Schema.Types.ObjectId, ref: "Class", default: null, index: true },
+    classIds: { type: [{ type: Schema.Types.ObjectId, ref: "Class" }], default: [] },
     title: { type: String, required: true, trim: true },
     body: { type: String, required: true, trim: true },
     audience: { type: String, enum: ["all", "student", "teacher", "class"], required: true },

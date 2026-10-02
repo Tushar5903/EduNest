@@ -1,6 +1,7 @@
 import { Types } from "mongoose";
 import { AuditLog } from "../models/AuditLog.js";
 import { Class, type ClassDoc } from "../models/Class.js";
+import { Fee } from "../models/Fee.js";
 import { Institute } from "../models/Institute.js";
 import { User } from "../models/User.js";
 import { ApiError } from "../utils/errors.js";
@@ -11,7 +12,8 @@ export interface ClassPayload {
   id: string;
   name: string;
   section?: string;
-  standard?: number;
+  standard?: string;
+  feeAmount: number;
   teacherId: string | null;
   academicYear: string;
   order: number;
@@ -25,6 +27,7 @@ export function toClassPayload(c: ClassDoc, studentCount = 0): ClassPayload {
     name: c.name,
     section: c.section,
     standard: c.standard,
+    feeAmount: c.feeAmount ?? 800,
     teacherId: c.teacherId ? String(c.teacherId) : null,
     academicYear: c.academicYear,
     order: c.order,
@@ -36,7 +39,7 @@ export function toClassPayload(c: ClassDoc, studentCount = 0): ClassPayload {
 async function studentCount(instituteId: string, classId: Types.ObjectId): Promise<number> {
   return User.countDocuments({
     instituteId: new Types.ObjectId(instituteId),
-    classId,
+    $or: [{ classId }, { classIds: classId }],
     role: "student",
     active: true,
   });
@@ -48,7 +51,8 @@ async function studentCount(instituteId: string, classId: Types.ObjectId): Promi
 export interface CreateClassInput {
   name: string;
   section?: string;
-  standard?: number;
+  standard?: string;
+  feeAmount?: number;
   teacherId?: string;
   academicYear: string;
   order: number;
@@ -83,6 +87,7 @@ export async function createClass(adminId: string, instituteId: string, input: C
     name: input.name.trim(),
     section: input.section?.trim(),
     standard: input.standard,
+    feeAmount: input.feeAmount ?? 800,
     teacherId: teacherObjectId,
     academicYear: input.academicYear.trim(),
     order: input.order,
@@ -153,7 +158,8 @@ export async function getClass(instituteId: string, classId: string, viewer: { r
 export interface UpdateClassInput {
   name?: string;
   section?: string;
-  standard?: number;
+  standard?: string;
+  feeAmount?: number;
   teacherId?: string | null;
   academicYear?: string;
   order?: number;
@@ -181,9 +187,19 @@ export async function updateClass(adminId: string, instituteId: string, classId:
   if (input.name !== undefined) klass.name = input.name.trim();
   if (input.section !== undefined) klass.section = input.section.trim();
   if (input.standard !== undefined) klass.standard = input.standard;
+  if (input.feeAmount !== undefined) klass.feeAmount = input.feeAmount;
   if (input.academicYear !== undefined) klass.academicYear = input.academicYear.trim();
   if (input.order !== undefined) klass.order = input.order;
   await klass.save();
+  if (input.feeAmount !== undefined) {
+    const students = await User.find({ instituteId: new Types.ObjectId(instituteId), role: "student", active: true, $or: [{ classId: klass._id }, { classIds: klass._id }] }).select("_id classId classIds");
+    await Promise.all(students.map(async (student) => {
+      const ids = student.classIds?.length ? student.classIds : student.classId ? [student.classId] : [];
+      const classes = await Class.find({ _id: { $in: ids }, instituteId: new Types.ObjectId(instituteId) }).select("feeAmount");
+      const amount = classes.reduce((sum, item) => sum + (item.feeAmount ?? 800), 0);
+      await Fee.updateMany({ instituteId: new Types.ObjectId(instituteId), studentId: student._id, status: { $ne: "paid" } }, { $set: { amount } });
+    }));
+  }
 
   await AuditLog.create({ by: adminId, instituteId, action: "class.updated" });
   return toClassPayload(klass, await studentCount(instituteId, klass._id as Types.ObjectId));

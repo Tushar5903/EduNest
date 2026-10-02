@@ -13,6 +13,7 @@ export interface UserDoc extends Document {
   /** Null for super-admin. Immutable after creation. */
   instituteId?: Schema.Types.ObjectId | null;
   classId?: Schema.Types.ObjectId | null;
+  classIds?: Schema.Types.ObjectId[];
   /** Per-class sequence 1..N. Display/attendance order only — NEVER a login. */
   rollNo?: number;
   gender?: "M" | "F" | "O";
@@ -39,6 +40,7 @@ const userSchema = new Schema<UserDoc>(
     role: { type: String, enum: ["super-admin", "admin", "teacher", "student"], required: true, immutable: true },
     instituteId: { type: Schema.Types.ObjectId, ref: "Institute", default: null, immutable: true, index: true },
     classId: { type: Schema.Types.ObjectId, ref: "Class", default: null, index: true },
+    classIds: { type: [{ type: Schema.Types.ObjectId, ref: "Class" }], default: [] },
     rollNo: { type: Number, min: 1 },
     gender: { type: String, enum: ["M", "F", "O"] },
     subject: { type: String, trim: true },

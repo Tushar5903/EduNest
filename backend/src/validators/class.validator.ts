@@ -11,7 +11,8 @@ export const createClassValidator = z
   .object({
     name: z.string().trim().min(1, "name required"),
     section: z.string().trim().optional(),
-    standard: z.number().int().min(1).optional(),
+    standard: z.string().trim().min(1).optional(),
+    feeAmount: z.number().min(0).optional(),
     teacherId: objectIdLike.optional(),
     academicYear,
     order: z.number().int().min(1, "order required"),
@@ -23,7 +24,8 @@ export const updateClassValidator = z
   .object({
     name: z.string().trim().min(1).optional(),
     section: z.string().trim().optional(),
-    standard: z.number().int().min(1).optional(),
+    standard: z.string().trim().min(1).optional(),
+    feeAmount: z.number().min(0).optional(),
     teacherId: objectIdLike.nullable().optional(),
     academicYear: academicYear.optional(),
     order: z.number().int().min(1).optional(),

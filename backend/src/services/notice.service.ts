@@ -4,7 +4,7 @@ import { Notice } from "../models/Notice.js";
 import { User } from "../models/User.js";
 import { ApiError } from "../utils/errors.js";
 import { parsePagination } from "../utils/pagination.js";
-import { assertObjectId } from "../utils/scope.js";
+import { assertObjectId, requireClassInInstitute } from "../utils/scope.js";
 
 /** Scoped feed: student all+student+own-class; teacher all+teacher+own-classes; admin all. */
 export async function listNotices(
@@ -16,18 +16,13 @@ export async function listNotices(
   const filter: Record<string, unknown> = { instituteId: new Types.ObjectId(instituteId), active: true };
 
   if (viewer.role === "student") {
-    const me = await User.findById(viewer.id).select("classId");
-    const audiences = ["all", "student"];
-    const or: Record<string, unknown>[] = [{ audience: { $in: audiences }, classId: null }];
-    if (me?.classId) or.push({ audience: "class", classId: me.classId }, { audience: "all" });
-    else or.push({ audience: "all" });
-    // Own-class + global only; other classes excluded. Teacher-audience excluded.
-    filter.$or = [{ audience: { $in: ["all", "student"] } }, ...(me?.classId ? [{ audience: "class", classId: me.classId }] : [])];
-    void or;
+    const me = await User.findById(viewer.id).select("classId classIds");
+    const classIds = Array.isArray(me?.classIds) ? me.classIds : me?.classId ? [me.classId] : [];
+    filter.$or = [{ audience: { $in: ["all", "student"] } }, ...(classIds.length ? [{ audience: "class", $or: [{ classId: { $in: classIds } }, { classIds: { $in: classIds } }] }] : [])];
   } else if (viewer.role === "teacher") {
     const owned = await Class.find({ teacherId: new Types.ObjectId(viewer.id), instituteId: new Types.ObjectId(instituteId) }).select("_id");
     const ownedIds = owned.map((c) => c._id);
-    filter.$or = [{ audience: { $in: ["all", "teacher"] } }, { audience: "class", classId: { $in: ownedIds } }];
+    filter.$or = [{ audience: { $in: ["all", "teacher"] } }, { audience: "class", $or: [{ classId: { $in: ownedIds } }, { classIds: { $in: ownedIds } }] }];
   }
   // Admin: no extra filter (all audiences). Optional narrow-down:
   if (query.audience && viewer.role === "admin") filter.audience = query.audience;
@@ -46,27 +41,30 @@ export async function listNotices(
     body: n.body,
     audience: n.audience,
     classId: n.classId ? String(n.classId) : null,
+    classIds: (n.classIds ?? []).map(String),
     type: n.type,
     createdAt: n.createdAt,
   }));
   return { data, page, total };
 }
 
-export async function createNotice(actor: { id: string; role: string }, instituteId: string, input: { title: string; body: string; audience: "all" | "student" | "teacher" | "class"; classId?: string }) {
+export async function createNotice(actor: { id: string; role: string }, instituteId: string, input: { title: string; body: string; audience: "all" | "student" | "teacher" | "class"; classId?: string; classIds?: string[] }) {
+  const classIds = Array.from(new Set(input.classIds ?? (input.classId ? [input.classId] : [])));
   if (actor.role === "teacher") {
-    if (input.audience !== "class" || !input.classId) throw ApiError.forbidden("Teachers can only post class notices for their own class");
-    assertObjectId(input.classId);
-    const klass = await Class.findById(input.classId);
-    if (!klass || String(klass.instituteId) !== instituteId) throw ApiError.forbidden("Cross-institute access denied");
-    if (String(klass.teacherId ?? "") !== actor.id) throw ApiError.forbidden("Forbidden for this class");
+    if (input.audience !== "class" || !classIds.length) throw ApiError.forbidden("Teachers can only post class notices for their own class");
+    const classes = await Promise.all(classIds.map((id) => requireClassInInstitute(id, instituteId)));
+    if (classes.some((klass) => String(klass.teacherId ?? "") !== actor.id)) throw ApiError.forbidden("Forbidden for this class");
   }
-  if (input.classId) assertObjectId(input.classId);
+  if (input.audience === "class" && !classIds.length) throw ApiError.badRequest("Select at least one target class");
+  const classes = classIds.length ? await Promise.all(classIds.map((id) => requireClassInInstitute(id, instituteId))) : [];
+  void classes;
   const n = await Notice.create({
     instituteId: new Types.ObjectId(instituteId),
     title: input.title.trim(),
     body: input.body.trim(),
     audience: input.audience,
-    classId: input.classId ? new Types.ObjectId(input.classId) : null,
+    classId: classIds[0] ? new Types.ObjectId(classIds[0]) : null,
+    classIds: classIds.map((id) => new Types.ObjectId(id)),
     type: "general",
     createdBy: new Types.ObjectId(actor.id),
   });

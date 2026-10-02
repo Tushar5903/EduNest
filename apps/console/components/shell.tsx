@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Bell, Building2, ChevronDown, ClipboardList, Grid2X2, GraduationCap, History, LogOut, Menu, PanelLeftClose, Search, ShieldCheck, X } from "lucide-react";
+import { Bell, Building2, ChevronDown, ClipboardList, Grid2X2, GraduationCap, History, LogOut, Menu, Search, ShieldCheck, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -22,11 +22,13 @@ const ADMIN_NAV = [
   { href: "/admin/classes", label: "Classes", icon: Building2 },
   { href: "/admin/timetable", label: "Timetable", icon: ClipboardList },
   { href: "/admin/attendance", label: "Attendance", icon: ClipboardList },
+  { href: "/admin/tests", label: "Tests", icon: ClipboardList },
+  { href: "/admin/results", label: "Results", icon: ClipboardList },
   { href: "/admin/fees", label: "Fees", icon: ClipboardList },
   { href: "/admin/salary", label: "Salary", icon: ClipboardList },
   { href: "/admin/notices", label: "Notices", icon: ClipboardList },
   { href: "/admin/complaints", label: "Complaints", icon: ClipboardList },
-  { href: "/admin/reports/school", label: "Reports", icon: History },
+  { href: "/admin/reports", label: "School Reports", icon: History },
   { href: "/admin/settings", label: "Settings", icon: ShieldCheck },
 ];
 
@@ -96,7 +98,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return <div className="min-h-screen bg-[#f6f4ff] text-[#17164b]">
     <aside className={`fixed inset-y-0 left-0 z-40 hidden flex-col bg-[#12113f] text-white transition-all lg:flex ${collapsed ? "w-[78px]" : "w-[300px]"}`}>
-      <div className="relative flex h-[78px] items-center gap-3 border-b border-white/10 px-5"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#2e2b6e]"><GraduationCap size={22} /></div>{!collapsed ? <div><div className="font-display text-xl font-bold tracking-tight">EduNest</div><div className="text-xs font-semibold tracking-[0.16em] text-[#a9a7d2]">{isSuper ? "SUPER ADMIN" : "ADMIN CONSOLE"}</div></div> : null}<button aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={() => setCollapsed((value) => !value)} className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#302d6d] text-[#f4f3ff] shadow-sm ring-1 ring-white/20 transition hover:bg-[#403d85] hover:text-white ${collapsed ? "absolute -right-8 top-5 z-50" : "ml-auto"}`}><PanelLeftClose size={18} className={collapsed ? "rotate-180" : ""} /></button></div>
+      <div className="relative flex h-[78px] items-center gap-3 border-b border-white/10 px-5"><button type="button" aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={() => setCollapsed((value) => !value)} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#2e2b6e] transition hover:bg-[#403d85]"><GraduationCap size={22} /></button>{!collapsed ? <div><div className="font-display text-xl font-bold tracking-tight">EduNest</div><div className="text-xs font-semibold tracking-[0.16em] text-[#a9a7d2]">{isSuper ? "SUPER ADMIN" : "ADMIN CONSOLE"}</div></div> : null}</div>
       <nav className="flex flex-1 flex-col gap-1 px-3 py-6">{navigation()}</nav>
       <button type="button" aria-label="Open account actions" onClick={() => setLogoutOpen(true)} className={`m-3 rounded-xl bg-[#211f5c] p-3 text-left transition hover:bg-[#2a2870] ${collapsed ? "flex justify-center" : ""}`}><div className="flex items-center gap-3"><div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#d8d7f6] text-sm font-bold text-[#27255e]">{user?.name?.slice(0, 1).toUpperCase() ?? "S"}</div>{!collapsed ? <div className="min-w-0"><div className="truncate text-sm font-semibold">{user?.name ?? "Super Admin"}</div><div className="text-xs text-[#aaa8d0]">{user?.role ?? "super-admin"}</div></div> : null}<ChevronDown size={17} className={`${collapsed ? "hidden" : "ml-auto"} text-[#aaa8d0]`} /></div></button>
     </aside>

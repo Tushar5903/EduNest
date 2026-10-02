@@ -35,7 +35,7 @@ export type CreateStudentInput = z.infer<typeof createStudentSchema>;
 export const createClassSchema = z.object({
   name: z.string().min(1),
   section: z.string().optional(),
-  standard: z.number().optional(),
+  standard: z.string().optional(),
   teacherId: z.string().optional(),
   academicYear: z.string().min(1),
   order: z.number(),

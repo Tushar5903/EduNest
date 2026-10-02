@@ -1,12 +1,14 @@
 import { Types } from "mongoose";
 import { Fee, FeeAudit } from "../models/Fee.js";
 import { User } from "../models/User.js";
+import { Class } from "../models/Class.js";
 import { ApiError } from "../utils/errors.js";
 import { assertObjectId } from "../utils/scope.js";
 import { todayISO } from "../utils/date.js";
 
 export interface FeePayload {
   id: string;
+  studentId: string;
   amount: number;
   dueDate: string;
   head?: string;
@@ -15,9 +17,18 @@ export interface FeePayload {
   overdue: boolean;
 }
 
+export async function calculateStudentFee(studentId: string, instituteId: string): Promise<number> {
+  const student = await User.findOne({ _id: new Types.ObjectId(studentId), instituteId: new Types.ObjectId(instituteId), role: "student" }).select("classId classIds");
+  const ids = student?.classIds?.length ? student.classIds : student?.classId ? [student.classId] : [];
+  if (!ids.length) return 0;
+  const classes = await Class.find({ _id: { $in: ids }, instituteId: new Types.ObjectId(instituteId) }).select("feeAmount");
+  return classes.reduce((sum, klass) => sum + (klass.feeAmount ?? 800), 0);
+}
+
 function toPayload(f: { _id: unknown; amount: number; dueDate: string; head?: string; status: string; paidAt?: Date | null }): FeePayload {
   return {
     id: String(f._id),
+    studentId: String((f as { studentId?: unknown }).studentId ?? ""),
     amount: f.amount,
     dueDate: f.dueDate,
     head: f.head,
@@ -96,10 +107,11 @@ export async function createFee(adminId: string, instituteId: string, input: { s
   const s = await User.findById(input.studentId).select("instituteId role active");
   if (!s || s.role !== "student" || !s.active) throw ApiError.badRequest("Invalid student");
   if (!s.instituteId || String(s.instituteId) !== instituteId) throw ApiError.forbidden("Cross-institute access denied");
+  const calculatedAmount = await calculateStudentFee(input.studentId, instituteId);
   const fee = await Fee.create({
     instituteId: new Types.ObjectId(instituteId),
     studentId: s._id,
-    amount: input.amount,
+    amount: calculatedAmount,
     dueDate: input.dueDate,
     head: input.head?.trim(),
     status: "pending",

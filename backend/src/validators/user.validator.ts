@@ -28,11 +28,13 @@ export const createTeacherValidator = z
 export const createStudentValidator = z
   .object({
     name: z.string().trim().min(2, "name required"),
-    classId: z.string().trim().min(1, "classId required"),
+    classId: z.string().trim().min(1).optional(),
+    classIds: z.array(z.string().trim().min(1)).min(1).optional(),
     gender: gender.optional(),
     phone: z.string().trim().optional(),
   })
-  .strict();
+  .strict()
+  .refine((value) => Boolean(value.classId || value.classIds?.length), "classId required");
 
 /**
  * PATCH /api/admin/users/:id — mutable fields only.
@@ -53,9 +55,11 @@ export const updateUserValidator = z.object({
 /** PATCH /api/admin/students/:id/reassign */
 export const reassignStudentValidator = z
   .object({
-    classId: z.string().trim().min(1, "classId required"),
+    classId: z.string().trim().min(1).optional(),
+    classIds: z.array(z.string().trim().min(1)).min(1).optional(),
   })
-  .strict();
+  .strict()
+  .refine((value) => Boolean(value.classId || value.classIds?.length), "classId required");
 
 /** PATCH /api/admin/classes/:id/teacher */
 export const assignClassTeacherValidator = z

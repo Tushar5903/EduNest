@@ -18,6 +18,10 @@ export async function listSalaries(instituteId: string, query: { teacherId?: str
   }
   if (query.month) filter.month = query.month;
   if (query.status) filter.status = query.status;
+  if (viewer.role === "admin" && query.month) {
+    const teachers = await User.find({ instituteId: new Types.ObjectId(instituteId), role: "teacher", active: true }).select("_id salaryAmount");
+    await Salary.bulkWrite(teachers.map((teacher) => ({ updateOne: { filter: { instituteId: new Types.ObjectId(instituteId), teacherId: teacher._id, month: query.month }, update: { $setOnInsert: { amount: teacher.salaryAmount ?? 0, status: "pending", paidAt: null } }, upsert: true } })));
+  }
   const rows = await Salary.find(filter).sort({ month: -1 }).limit(200);
   return rows.map((s) => toPayload(s as never));
 }

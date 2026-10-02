@@ -15,6 +15,7 @@ export const createNoticeValidator = z
     body: z.string().trim().min(1, "body required").max(5000),
     audience: z.enum(["all", "student", "teacher", "class"]),
     classId: z.string().trim().min(1).optional(),
+    classIds: z.array(z.string().trim().min(1)).optional(),
   })
   .strict();
 
@@ -23,5 +24,7 @@ export const updateNoticeValidator = z
   .object({
     title: z.string().trim().min(2).max(200).optional(),
     body: z.string().trim().min(1).max(5000).optional(),
+    audience: z.enum(["all", "student", "teacher", "class"]).optional(),
+    classIds: z.array(z.string().trim().min(1)).optional(),
   })
   .strict();

@@ -94,7 +94,7 @@ export async function removeStudentFromClass(req: Request, res: Response, next: 
 export async function reassignStudent(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { adminId, instituteId } = ctx(req);
-    ok(res, await userService.reassignStudent(adminId, instituteId, req.params.id, req.body.classId as string));
+    ok(res, await userService.reassignStudent(adminId, instituteId, req.params.id, req.body.classId as string, req.body.classIds as string[] | undefined));
   } catch (err) {
     next(err);
   }

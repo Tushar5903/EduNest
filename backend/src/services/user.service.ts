@@ -1,6 +1,8 @@
 import { Types } from "mongoose";
 import { AuditLog } from "../models/AuditLog.js";
 import { Class } from "../models/Class.js";
+import { Fee } from "../models/Fee.js";
+import { Institute } from "../models/Institute.js";
 import { User, type UserDoc } from "../models/User.js";
 import { ApiError } from "../utils/errors.js";
 import { generateLoginId, generateReferenceId, generateStudentId, nextRollNo } from "../utils/idGenerator.js";
@@ -17,6 +19,7 @@ interface SanitizedUser {
   role: string;
   instituteId: string | null;
   classId: string | null;
+  classIds: string[];
   rollNo?: number;
   gender?: string;
   subject?: string;
@@ -39,6 +42,7 @@ export function sanitizeUser(u: UserDoc): SanitizedUser {
     role: u.role,
     instituteId: u.instituteId ? String(u.instituteId) : null,
     classId: u.classId ? String(u.classId) : null,
+    classIds: Array.isArray(u.classIds) ? u.classIds.map((id) => String(id)) : u.classId ? [String(u.classId)] : [],
     rollNo: u.rollNo,
     gender: u.gender,
     subject: u.subject,
@@ -100,18 +104,23 @@ export async function createTeacher(adminId: string, instituteId: string, input:
 // ---------------------------------------------------------------------------
 export interface CreateStudentInput {
   name: string;
-  classId: string;
+  classId?: string;
+  classIds?: string[];
   gender?: "M" | "F" | "O";
   phone?: string;
 }
 
 export async function createStudent(adminId: string, instituteId: string, input: CreateStudentInput) {
-  const klass = await requireClassInInstitute(input.classId, instituteId);
+  const targetIds = Array.from(new Set(input.classIds?.length ? input.classIds : input.classId ? [input.classId] : []));
+  const classes = await Promise.all(targetIds.map((id) => requireClassInInstitute(id, instituteId)));
+  const klass = classes[0];
+  if (!klass) throw ApiError.badRequest("At least one class is required");
   if (!klass.active) throw ApiError.badRequest("Class is no longer active");
 
   const existing = await User.distinct("rollNo", {
     instituteId: new Types.ObjectId(instituteId),
     classId: klass._id,
+    classIds: classes.map((item) => item._id),
     role: "student",
     active: true,
     rollNo: { $type: "number" },
@@ -129,11 +138,15 @@ export async function createStudent(adminId: string, instituteId: string, input:
     role: "student",
     instituteId: new Types.ObjectId(instituteId),
     classId: klass._id,
+    classIds: classes.map((item) => item._id),
     rollNo,
     status: "active",
   });
   await AuditLog.create({ by: adminId, instituteId, action: "student.created" });
-  return { id: String(student._id), name: student.name, loginId, tempPassword, rollNo, classId: String(klass._id) };
+  const monthlyFee = classes.reduce((sum, item) => sum + (item.feeAmount ?? 800), 0);
+  const dueDate = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 1, 0)).toISOString().slice(0, 10);
+  await Fee.create({ instituteId: new Types.ObjectId(instituteId), studentId: student._id, amount: monthlyFee, dueDate, head: "Monthly Class Fee", status: "pending" });
+  return { id: String(student._id), name: student.name, loginId, tempPassword, rollNo, classId: String(klass._id), classIds: classes.map((item) => String(item._id)) };
 }
 
 // ---------------------------------------------------------------------------
@@ -189,11 +202,13 @@ export async function listStudents(instituteId: string, query: ListUsersQuery) {
     active: true,
     ...statusFilter(query.status),
   };
-  if (query.classId) filter.classId = new Types.ObjectId(query.classId);
+  if (query.classId) filter.$or = [{ classId: new Types.ObjectId(query.classId) }, { classIds: new Types.ObjectId(query.classId) }];
   const q = (query.search ?? "").trim();
   if (q) {
     const safe = escapeRegExpValue(q);
-    filter.$or = [{ name: new RegExp(safe, "i") }, { loginId: new RegExp(safe, "i") }];
+    const searchOr = [{ name: new RegExp(safe, "i") }, { loginId: new RegExp(safe, "i") }];
+    if (filter.$or) filter.$and = [{ $or: filter.$or }, { $or: searchOr }];
+    else filter.$or = searchOr;
   }
   const [total, rows] = await Promise.all([
     User.countDocuments(filter),
@@ -209,12 +224,14 @@ export async function getUser(instituteId: string, userId: string) {
   const user = await requireUserInInstitute(userId, instituteId);
   if (!user.active) throw ApiError.notFound("User not found");
   const base = sanitizeUser(user);
-  if (user.role !== "teacher") return base;
+  const institute = await Institute.findById(user.instituteId).select("name").lean();
+  const withInstitute = { ...base, instituteName: institute?.name ?? "Unknown institute" };
+  if (user.role !== "teacher") return withInstitute;
   const assigned = await Class.find({ teacherId: user._id, instituteId: user.instituteId, active: true })
     .select("name section academicYear")
     .lean();
   return {
-    ...base,
+    ...withInstitute,
     assignedClasses: assigned.map((c) => ({
       id: String(c._id),
       name: c.name,
@@ -324,12 +341,20 @@ export async function removeStudentFromClass(adminId: string, instituteId: strin
 // ---------------------------------------------------------------------------
 // J. Reassign student — new rollNo = max(target) + 1, loginId preserved.
 // ---------------------------------------------------------------------------
-export async function reassignStudent(adminId: string, instituteId: string, studentId: string, targetClassId: string) {
+export async function reassignStudent(adminId: string, instituteId: string, studentId: string, targetClassId: string, targetClassIds: string[] = []) {
   const student = await requireUserInInstitute(studentId, instituteId);
   if (!student.active) throw ApiError.notFound("User not found");
   if (student.role !== "student") throw ApiError.badRequest("Only students can be reassigned");
 
-  const target = await requireClassInInstitute(targetClassId, instituteId);
+  const ids = Array.from(new Set(targetClassIds.length ? targetClassIds : [targetClassId]));
+  const targets = await Promise.all(ids.map((id) => requireClassInInstitute(id, instituteId)));
+  const previousIds = Array.isArray(student.classIds) ? student.classIds.map((id) => String(id)) : student.classId ? [String(student.classId)] : [];
+  if (ids.some((id) => previousIds.includes(id))) {
+    throw ApiError.conflict("Student is already assigned to this class");
+  }
+  const mergedIds = Array.from(new Set([...previousIds, ...ids]));
+  const mergedTargets = await Promise.all(mergedIds.map((id) => requireClassInInstitute(id, instituteId)));
+  const target = targets[0];
   if (!target.active) throw ApiError.badRequest("Target class is no longer active");
 
   const existing = (await User.distinct("rollNo", {
@@ -341,8 +366,11 @@ export async function reassignStudent(adminId: string, instituteId: string, stud
   })) as number[];
 
   student.classId = target._id as never;
+  student.classIds = mergedTargets.map((item) => item._id) as never;
   student.rollNo = nextRollNo(existing);
   await student.save();
+  const monthlyFee = mergedTargets.reduce((sum, item) => sum + (item.feeAmount ?? 800), 0);
+  await Fee.updateMany({ instituteId: new Types.ObjectId(instituteId), studentId: student._id, status: { $ne: "paid" } }, { $set: { amount: monthlyFee } });
   // Assignment trail reuses the append-only AuditLog (no duplicate log model).
   await AuditLog.create({ by: adminId, instituteId, action: "student.reassigned" });
   return sanitizeUser(student);

@@ -14,7 +14,7 @@ export async function schoolReport(instituteId: string) {
   const [students, teachers, classes] = await Promise.all([
     User.countDocuments({ instituteId: iid, role: "student", active: true }),
     User.countDocuments({ instituteId: iid, role: "teacher", active: true }),
-    Class.countDocuments({ instituteId: iid }),
+    Class.countDocuments({ instituteId: iid, active: true }),
   ]);
   const genderAgg = await User.aggregate([
     { $match: { instituteId: iid, role: "student", active: true } },

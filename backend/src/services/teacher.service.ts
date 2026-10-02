@@ -81,7 +81,7 @@ export async function classDashboard(teacherId: string, instituteId: string, cla
 //    S-XXXX / temp credential / rollNo / AuditLog all reused, actor = teacher.
 // ---------------------------------------------------------------------------
 export async function createStudentInOwnClass(teacherId: string, instituteId: string, input: CreateStudentInput) {
-  const klass = await requireClassInInstitute(input.classId, instituteId);
+  const klass = await requireClassInInstitute(input.classId!, instituteId);
   if (!klass.active) throw ApiError.badRequest("Class is no longer active");
   if (String(klass.teacherId ?? "") !== teacherId) {
     throw ApiError.forbidden("You can only add students to your own classes");
