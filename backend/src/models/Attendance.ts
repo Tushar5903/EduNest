@@ -1,6 +1,7 @@
 import { Schema, Types, model, type Document } from "mongoose";
 
-export type AttendanceStatus = "present" | "absent";
+/** Informed leave is neutral — excluded from attendance percentage (see myAttendance). */
+export type AttendanceStatus = "present" | "absent" | "leave";
 
 export interface AttendanceRecord {
   studentId: Types.ObjectId;
@@ -23,7 +24,7 @@ export interface AttendanceDoc extends Document {
 const recordSchema = new Schema<AttendanceRecord>(
   {
     studentId: { type: Schema.Types.ObjectId, ref: "User", required: true },
-    status: { type: String, enum: ["present", "absent"], required: true },
+    status: { type: String, enum: ["present", "absent", "leave"], required: true },
   },
   { _id: false },
 );

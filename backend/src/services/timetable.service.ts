@@ -23,6 +23,8 @@ export interface TimetablePayload {
   type: string;
   active: boolean;
   state?: SlotState;
+  /** True when the slot belongs to one of my classes but another teacher owns it. */
+  covering?: boolean;
 }
 
 /** HH:MM → minutes since midnight. Validated HH:MM upstream. */
@@ -206,11 +208,21 @@ export async function todaySchedule(
   const now = query.now ?? nowHM();
   const day = weekdayOf(date);
 
+  // Own slots plus slots of my assigned classes taught by someone else — without
+  // the latter, a teacher whose class period is owned by a colleague sees an empty
+  // schedule and cannot pick a period for attendance.
+  const ownedClassIds = (
+    await Class.find({
+      teacherId: new Types.ObjectId(teacherId),
+      instituteId: new Types.ObjectId(instituteId),
+      active: true,
+    }).select("_id")
+  ).map((c) => c._id);
   const rows = await Timetable.find({
     instituteId: new Types.ObjectId(instituteId),
-    teacherId: new Types.ObjectId(teacherId),
     day,
     active: true,
+    $or: [{ teacherId: new Types.ObjectId(teacherId) }, { classId: { $in: ownedClassIds } }],
   }).sort({ startTime: 1 });
 
   const stateOf = (t: TimetableDoc): SlotState =>
@@ -220,9 +232,11 @@ export async function todaySchedule(
         ? "UPCOMING"
         : "DONE";
   const rank: Record<SlotState, number> = { LIVE: 0, UPCOMING: 1, DONE: 2 };
-  const data = (await payloadize(rows, stateOf)).sort(
-    (a, b) => rank[a.state as SlotState] - rank[b.state as SlotState] || toMinutes(a.startTime) - toMinutes(b.startTime),
-  );
+  const data = (await payloadize(rows, stateOf))
+    .map((slot) => ({ ...slot, covering: String(slot.teacherId) !== teacherId }))
+    .sort(
+      (a, b) => rank[a.state as SlotState] - rank[b.state as SlotState] || toMinutes(a.startTime) - toMinutes(b.startTime),
+    );
   return { date, day, now, data };
 }
 

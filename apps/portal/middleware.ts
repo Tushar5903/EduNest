@@ -19,11 +19,9 @@ export function middleware(req: NextRequest) {
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
-  if (hasSession && pathname === "/login") {
-    const url = req.nextUrl.clone();
-    url.pathname = "/";
-    return NextResponse.redirect(url);
-  }
+  // NOTE: no hasSession-on-/login redirect — it used to ping-pong with the
+  // root page's redirect (infinite blank refresh loop). Role routing is owned
+  // by app/page.tsx (client, via GET /auth/me) and the shell role guard.
   return NextResponse.next();
 }
 

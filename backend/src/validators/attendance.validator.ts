@@ -17,7 +17,7 @@ export const markAttendanceValidator = z
         z
           .object({
             studentId: objectIdLike,
-            status: z.enum(["present", "absent"]),
+            status: z.enum(["present", "absent", "leave"]),
           })
           .strict(),
       )
@@ -33,7 +33,7 @@ export const updateAttendanceValidator = z
         z
           .object({
             studentId: objectIdLike,
-            status: z.enum(["present", "absent"]),
+            status: z.enum(["present", "absent", "leave"]),
           })
           .strict(),
       )

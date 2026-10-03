@@ -9,15 +9,27 @@ export interface SessionUser {
   adminStatus?: string;
 }
 
+/** Backend envelopes: login → { user }, session → { user, banner }. Unwrap here (console parity). */
+interface AuthEnvelope {
+  user: SessionUser;
+}
+
+interface SessionEnvelope {
+  user: SessionUser;
+  banner: { adminSuspended: boolean; instituteStatus: string };
+}
+
 export async function getMe(): Promise<SessionUser> {
-  return api<SessionUser>("/auth/me");
+  const session = await api<SessionEnvelope>("/auth/me");
+  return session.user;
 }
 
 export async function login(identifier: string, password: string): Promise<SessionUser> {
   if (!/^(T-|S-)/i.test(identifier.trim()) && /^\d+$/.test(identifier.trim()) === false && identifier.includes("@")) {
     throw new Error("Use console login for email accounts");
   }
-  return apiPost<SessionUser>("/auth/login", { identifier: identifier.trim(), password });
+  const body = await apiPost<AuthEnvelope>("/auth/login", { identifier: identifier.trim(), password });
+  return body.user;
 }
 
 export async function logout(): Promise<void> {

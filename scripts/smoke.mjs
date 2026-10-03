@@ -1,4 +1,4 @@
-// Workspace + dependency + boot verification (Phase 1 smoke).
+// Workspace + dependency + boot verification (structure smoke).
 import { existsSync } from "node:fs";
 
 const required = [

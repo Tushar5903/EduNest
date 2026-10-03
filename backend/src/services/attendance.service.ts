@@ -5,12 +5,11 @@ import { Class } from "../models/Class.js";
 import { Timetable } from "../models/Timetable.js";
 import { User } from "../models/User.js";
 import { ApiError } from "../utils/errors.js";
-import { todayISO } from "../utils/date.js";
 import { assertObjectId } from "../utils/scope.js";
 
 export interface AttendanceMark {
   studentId: string;
-  status: "present" | "absent";
+  status: "present" | "absent" | "leave";
 }
 
 export interface AttendancePayload {
@@ -227,14 +226,18 @@ export async function myAttendance(studentId: string, instituteId: string, month
     return { date: d.date, classId: String(d.classId), periodId: String(d.periodId), status: rec.status };
   });
   const present = days.filter((d) => d.status === "present").length;
-  const total = days.length;
-  // Only recorded days count — unrecorded days are never treated as absent.
-  const percent = total === 0 ? 0 : Math.round((present / total) * 100);
-  return { days, present, absent: total - present, total, percent };
+  const absent = days.filter((d) => d.status === "absent").length;
+  const leave = days.length - present - absent;
+  const counted = present + absent;
+  // Only counted days matter — unrecorded days are never absent, and informed
+  // leave is neutral (excluded from the percentage denominator).
+  const percent = counted === 0 ? 0 : Math.round((present / counted) * 100);
+  return { days, present, absent, leave, total: counted, percent };
 }
 
 // ---------------------------------------------------------------------------
-// EDIT — admin anytime; teacher same-calendar-day + owned class only.
+// EDIT — admin (own institute); teacher (owned class, any date). Every edit is
+// audit-logged via attendance.updated so history stays traceable.
 // ---------------------------------------------------------------------------
 export async function updateAttendance(
   actor: { id: string; role: string },
@@ -251,9 +254,6 @@ export async function updateAttendance(
     const klass = await Class.findById(doc.classId).select("teacherId");
     if (!klass || String(klass.teacherId ?? "") !== actor.id) {
       throw ApiError.forbidden("Forbidden for this class");
-    }
-    if (doc.date !== todayISO()) {
-      throw ApiError.forbidden("Only today's attendance can be edited — contact admin for older records");
     }
   }
 

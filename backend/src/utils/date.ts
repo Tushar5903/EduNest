@@ -1,4 +1,4 @@
-/** Server calendar date (UTC) as YYYY-MM-DD. Attendance same-day rules use this. */
+/** Server calendar date (UTC) as YYYY-MM-DD. Used for attendance defaults, rate-limit day bounds, and due-date checks. */
 export function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
