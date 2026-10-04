@@ -10,6 +10,7 @@ import { Area as AreaRaw, AreaChart, Bar as BarRaw, BarChart, CartesianGrid, Cel
 import { localISODate, teacherApi, type ClassDashboard, type TeacherClass } from "@/lib/teacher-api";
 import { api } from "@/lib/api";
 import { ChartCard, EmptyState, Skeleton, StatCard } from "@/components/ui";
+import { ATTENDANCE_COLORS, ActiveDonutShape, DonutChart, DonutLegend, GENDER_COLORS, PerformanceRing } from "@/components/donut-chart";
 
 const Area = AreaRaw as unknown as React.ComponentType<Record<string, unknown>>;
 const Bar = BarRaw as unknown as React.ComponentType<Record<string, unknown>>;
@@ -55,6 +56,11 @@ function Dashboard(){
   const schedule=useQuery({queryKey:["schedule",today],queryFn:()=>teacherApi.schedule(today,new Date().toTimeString().slice(0,5)),refetchInterval:60000});
   const classIds=useMemo(()=>(classes.data||[]).map((c)=>c.id),[classes.data]);
   const dashboards=useQueries({queries:classIds.map((id)=>({queryKey:["teacher","dashboard",id],queryFn:()=>teacherApi.classDashboard(id),enabled:classIds.length>0,staleTime:30000}))});
+  const attendanceQueries=useQueries({queries:classIds.map((id)=>({queryKey:["attendance","class",id],queryFn:()=>teacherApi.attendance({classId:id}),enabled:classIds.length>0,staleTime:30000}))});
+  const [pinnedGender,setPinnedGender]=useState<string|null>(null);
+  const [hoverGender,setHoverGender]=useState<string|null>(null);
+  const [pinnedAttendance,setPinnedAttendance]=useState<string|null>(null);
+  const [hoverAttendance,setHoverAttendance]=useState<string|null>(null);
   if(classes.isError)return <div><TeacherHeader title="Teacher Dashboard" eyebrow="EduNest / Teacher Workspace" description="A live overview of your classes, students, attendance, and performance." /><div style={{marginTop:16}}><ErrorBox message="The dashboard could not load from the EduNest API. Check that the backend is running and your teacher session is valid." /></div></div>;
   const classRows=classes.data||[], slots=schedule.data?.data||[];
   const boards=dashboards.map((d)=>d.data).filter((d):d is ClassDashboard=>Boolean(d));
@@ -74,11 +80,48 @@ function Dashboard(){
   }
   const avgAttendance=attWeight?Math.round(attWeightedSum/attWeight):null;
   const avgPerformance=perfWeight?Math.round(perfWeightedSum/perfWeight):null;
-  const gender=[{name:"Male",value:male},{name:"Female",value:female},{name:"Other",value:other}];
+  const gender=[{name:"Boys",value:male},{name:"Girls",value:female},{name:"Other",value:other}];
+  const genderPieData=gender.filter((d)=>d.value>0);
+  const genderTotal=male+female+other;
+  const dominantGender=gender.reduce((max,g)=>g.value>max.value?g:max,gender[0]);
+  const activeGenderName=hoverGender??pinnedGender;
+  const activeGenderEntry=gender.find((g)=>g.name===activeGenderName&&g.value>0);
+  const displayedGender=activeGenderEntry??dominantGender;
+  const displayedGenderIndex=Math.max(0,gender.findIndex((g)=>g.name===displayedGender.name));
+  const displayedGenderPct=genderTotal>0?Math.round((displayedGender.value/genderTotal)*100):0;
+  const displayedGenderColor=GENDER_COLORS[displayedGenderIndex%GENDER_COLORS.length];
+  const activeGenderIndex=Math.max(0,genderPieData.findIndex((entry)=>entry.name===displayedGender.name));
+  const handleGenderPieEnter=(_:unknown,index:unknown)=>{const i=Number(index);if(Number.isFinite(i)&&genderPieData[i])setHoverGender(genderPieData[i].name);};
+  const handleGenderPieLeave=()=>setHoverGender(null);
+  const handleGenderPieClick=(_:unknown,index:unknown)=>{const i=Number(index);if(!Number.isFinite(i)||!genderPieData[i])return;const name=genderPieData[i].name;setPinnedGender((prev)=>prev===name?null:name);};
   const strengthTrend=classRows.map((c)=>{const board=boards.find((b)=>b.classId===c.id);return {name:shortClassName(c),value:board?board.total:(c.studentCount??0)};});
   const performanceByClass=boards.map((d)=>{const c=classRows.find((x)=>x.id===d.classId);return {name:c?shortClassName(c):d.classId.slice(0,6),value:d.performanceSummary.averagePercent};});
-  const presentCount=attWeight&&avgAttendance!==null?Math.round((attWeight*avgAttendance)/100):0;
-  const attendanceData=[{name:"Present",value:presentCount},{name:"Absent",value:Math.max(0,attWeight-presentCount)},{name:"No record",value:Math.max(0,total-attWeight)}];
+  let presentCount=0, absentCount=0, leaveCount=0;
+  for(const attQ of attendanceQueries){
+    for(const doc of attQ.data||[]){
+      for(const r of doc.records){
+        if(r.status==="present")presentCount++;
+        else if(r.status==="absent")absentCount++;
+        else leaveCount++;
+      }
+    }
+  }
+  const attendanceData=[{name:"Present",value:presentCount},{name:"Absent",value:absentCount},{name:"Leave",value:leaveCount}];
+  const attendancePieData=attendanceData.filter((d)=>d.value>0);
+  const attendanceTotal=presentCount+absentCount+leaveCount;
+  const attendanceLoading=attendanceQueries.some((q)=>q.isLoading||q.isPending);
+  const attendanceError=attendanceQueries.some((q)=>q.isError);
+  const dominantAttendance=attendanceData.reduce((max,a)=>a.value>max.value?a:max,attendanceData[0]);
+  const activeAttendanceName=hoverAttendance??pinnedAttendance;
+  const activeAttendanceEntry=attendanceData.find((a)=>a.name===activeAttendanceName&&a.value>0);
+  const displayedAttendance=activeAttendanceEntry??dominantAttendance;
+  const displayedAttendanceIndex=Math.max(0,attendanceData.findIndex((a)=>a.name===displayedAttendance.name));
+  const displayedAttendancePct=attendanceTotal>0?Math.round((displayedAttendance.value/attendanceTotal)*100):0;
+  const displayedAttendanceColor=ATTENDANCE_COLORS[displayedAttendanceIndex%ATTENDANCE_COLORS.length];
+  const activeAttendanceIndex=Math.max(0,attendancePieData.findIndex((entry)=>entry.name===displayedAttendance.name));
+  const handleAttendancePieEnter=(_:unknown,index:unknown)=>{const i=Number(index);if(Number.isFinite(i)&&attendancePieData[i])setHoverAttendance(attendancePieData[i].name);};
+  const handleAttendancePieLeave=()=>setHoverAttendance(null);
+  const handleAttendancePieClick=(_:unknown,index:unknown)=>{const i=Number(index);if(!Number.isFinite(i)||!attendancePieData[i])return;const name=attendancePieData[i].name;setPinnedAttendance((prev)=>prev===name?null:name);};
   return <div>
     <TeacherHeader title="Teacher Dashboard" eyebrow="EduNest / Teacher Workspace" description="A live overview of your classes, students, attendance, and performance." />
     <div className="grid grid-cols-2 gap-4 xl:grid-cols-5">
@@ -104,17 +147,22 @@ function Dashboard(){
           )}
         </div>
       </ChartCard>
-      <ChartCard title="Student profile">
-        <div className="h-64">
-          {loading?<Skeleton className="h-full w-full" />:total===0?<EmptyState title={boardsError?"Unable to load student data":"No gender data"} />:(
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={gender} dataKey="value" nameKey="name" innerRadius={64} outerRadius={92} paddingAngle={4}>
-                  {gender.map((entry,index)=><Cell key={entry.name} fill={["#3B82F6","#EC4899","#8B5CF6"][index%3]} />)}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
+      <ChartCard title="Gender ratio" action={<span className="text-xs text-[#57558b]">{genderTotal>0?`${genderTotal} students`:"Awaiting data"}</span>}>
+        <div className="flex items-center gap-2">
+          {loading?<Skeleton className="h-64 w-full" />:genderTotal===0?<EmptyState title={boardsError?"Unable to load student data":"No gender data"} />:(
+            <><div className="relative h-64 min-w-0 flex-1">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={genderPieData} dataKey="value" nameKey="name" innerRadius={64} outerRadius={92} paddingAngle={4} labelLine={false} activeIndex={activeGenderIndex} activeShape={ActiveDonutShape} onMouseEnter={handleGenderPieEnter} onMouseLeave={handleGenderPieLeave} onClick={handleGenderPieClick} style={{cursor:"pointer"}}>
+                    {genderPieData.map((entry)=>{const fullIndex=gender.findIndex((d)=>d.name===entry.name);return <Cell key={entry.name} fill={GENDER_COLORS[fullIndex>=0?fullIndex:0]} style={{cursor:"pointer"}} />;})}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-sm font-semibold text-[#57558b]">{displayedGender.name}</span>
+                <span className="font-display text-3xl font-bold tabular-nums" style={{color:displayedGenderColor}}>{displayedGenderPct}%</span>
+              </div>
+            </div><DonutLegend items={gender} colors={GENDER_COLORS} activeName={displayedGender.name} onHover={(name)=>setHoverGender(name)} onSelect={(name)=>setPinnedGender((prev)=>prev===name?null:name)} /></>
           )}
         </div>
       </ChartCard>
@@ -135,17 +183,22 @@ function Dashboard(){
           )}
         </div>
       </ChartCard>
-      <ChartCard title="Attendance overview" action={<span className="text-xs text-[#13855b]">{avgAttendance!==null?`${avgAttendance}% average`:"Awaiting data"}</span>}>
-        <div className="h-56">
-          {loading?<Skeleton className="h-full w-full" />:total===0?<EmptyState title={boardsError?"Unable to load attendance":"No attendance data"} />:(
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={attendanceData} dataKey="value" nameKey="name" innerRadius={62} outerRadius={90} paddingAngle={4}>
-                  {attendanceData.map((entry,index)=><Cell key={entry.name} fill={["#13855b","#d64545","#dcd9f4"][index]} />)}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
+      <ChartCard title="Attendance overview" action={<span className="text-xs text-[#13855b]">{attendanceTotal>0?`${attendanceTotal} marked`:"Awaiting data"}</span>}>
+        <div className="flex items-center gap-2">
+          {loading||attendanceLoading?<Skeleton className="h-56 w-full" />:attendanceError?<EmptyState title="Unable to load attendance" />:attendanceTotal===0?<EmptyState title={boardsError?"Unable to load attendance":"No attendance data"} />:(
+            <><div className="relative h-56 min-w-0 flex-1">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={attendancePieData} dataKey="value" nameKey="name" innerRadius={62} outerRadius={90} paddingAngle={4} activeIndex={activeAttendanceIndex} activeShape={ActiveDonutShape} onMouseEnter={handleAttendancePieEnter} onMouseLeave={handleAttendancePieLeave} onClick={handleAttendancePieClick} style={{cursor:"pointer"}}>
+                    {attendancePieData.map((entry)=>{const fullIndex=attendanceData.findIndex((d)=>d.name===entry.name);return <Cell key={entry.name} fill={ATTENDANCE_COLORS[fullIndex>=0?fullIndex:0]} style={{cursor:"pointer"}} />;})}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-sm font-semibold text-[#57558b]">{displayedAttendance.name}</span>
+                <span className="font-display text-3xl font-bold tabular-nums" style={{color:displayedAttendanceColor}}>{displayedAttendancePct}%</span>
+              </div>
+            </div><DonutLegend items={attendanceData} colors={ATTENDANCE_COLORS} activeName={displayedAttendance.name} onHover={(name)=>setHoverAttendance(name)} onSelect={(name)=>setPinnedAttendance((prev)=>prev===name?null:name)} /></>
           )}
         </div>
       </ChartCard>
@@ -165,6 +218,7 @@ function ClassDetail(){
   const params=useParams<{id:string}>(); const classes=useQuery({queryKey:["teacher","classes"],queryFn:teacherApi.classes}); const id=params.id||"";
   const q=useQuery({queryKey:["dashboard",id],queryFn:()=>teacherApi.classDashboard(id),enabled:Boolean(id)});
   const [month,setMonth]=useState("all");
+  const [query,setQuery]=useState("");
   const attQ=useQuery({queryKey:["attendance","class",id],queryFn:()=>teacherApi.attendance({classId:id}),enabled:Boolean(id)});
   const docs=useMemo(()=>attQ.data||[],[attQ.data]);
   const months=useMemo(()=>Array.from(new Set(docs.map(x=>x.date.slice(0,7)))).sort().reverse(),[docs]);
@@ -173,12 +227,31 @@ function ClassDetail(){
   let present=0,absent=0,leave=0;
   for(const doc of scoped){ for(const r of doc.records){ if(r.status==="present")present++; else if(r.status==="absent")absent++; else leave++; } }
   const genderTotal=d.genderCounts.M+d.genderCounts.F+d.genderCounts.O;
-  const genderColors=["#3B82F6","#EC4899","#8B5CF6"];
-  const attendanceColors=["#13855b","#d64545","#dcd9f4"];
-  const gender=[{name:"Male",value:d.genderCounts.M},{name:"Female",value:d.genderCounts.F},{name:"Other",value:d.genderCounts.O}];
+  const attendanceTotal=present+absent+leave;
+  const gender=[{name:"Boys",value:d.genderCounts.M},{name:"Girls",value:d.genderCounts.F},{name:"Other",value:d.genderCounts.O}];
   const attendanceData=[{name:"Present",value:present},{name:"Absent",value:absent},{name:"Leave",value:leave}];
-  const legend=(items:Array<{name:string;value:number}>,colors:string[])=>(<div className="flex shrink-0 flex-col gap-3">{items.map((entry,index)=><span key={entry.name} className="inline-flex items-center gap-2 text-xs font-semibold text-[#57558b]"><span style={{width:10,height:10,borderRadius:"50%",background:colors[index%colors.length],display:"inline-block"}}/>{entry.name} · {entry.value}</span>)}</div>);
-  return <><Heading eyebrow="MY CLASSES  •  ACTIVE COHORT" title={c?.name||"Class Dashboard"} description="Roster and performance data returned by GET /teacher/classes/:id/dashboard"><Button href="/teacher/attendance"><ClipboardCheck size={15}/> Take Attendance</Button><Button href="/teacher/notices">Post Class Notice</Button></Heading><Stats items={[["Enrollment",String(d.total),"Active students"],["Average Attendance",d.attendanceSummary.averagePercent+"%",d.attendanceSummary.studentsWithData+" students with records"]]}/><div className="mt-5 grid gap-5 xl:grid-cols-2"><ChartCard title="Gender split">{genderTotal===0?<EmptyState title="No gender data" />:(<div className="flex items-center gap-2"><div className="h-64 min-w-0 flex-1"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={gender} dataKey="value" nameKey="name" innerRadius={64} outerRadius={92} paddingAngle={4}>{gender.map((entry,index)=><Cell key={entry.name} fill={genderColors[index%3]} />)}</Pie><Tooltip /></PieChart></ResponsiveContainer></div>{legend(gender,genderColors)}</div>)}</ChartCard><ChartCard title="Attendance" action={<select className="select" style={{minHeight:34}} value={month} onChange={e=>setMonth(e.target.value)} aria-label="Attendance month"><option value="all">All time</option>{months.map(m=><option key={m} value={m}>{m}</option>)}</select>}><div className="flex items-center gap-2">{attQ.isLoading?<Skeleton className="h-64 w-full" />:attQ.isError?<EmptyState title="Unable to load attendance" />:scoped.length===0?<EmptyState title="No attendance data" />:(<><div className="h-64 min-w-0 flex-1"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={attendanceData} dataKey="value" nameKey="name" innerRadius={64} outerRadius={92} paddingAngle={4}>{attendanceData.map((entry,index)=><Cell key={entry.name} fill={attendanceColors[index]} />)}</Pie><Tooltip /></PieChart></ResponsiveContainer></div>{legend(attendanceData,attendanceColors)}</>)}</div></ChartCard></div><div className="panel" style={{marginTop:20}}><div className="panel-head"><div><h2>Student Roster</h2><span className="muted">Sorted by roll number by the backend.</span></div><div className="search-input"><Search size={15}/><input placeholder="Search student name or ID"/></div></div><div className="table-wrap"><table className="data-table"><thead><tr><th>Roll</th><th>Student Name</th><th>Student ID</th><th>Gender</th><th>Fee Status</th><th>Performance %</th><th>Attendance %</th><th>Profile</th></tr></thead><tbody>{d.roster.map(s=><tr key={s.id}><td><span className="muted">#{s.rollNo??"—"}</span></td><td>{s.name}</td><td>{s.loginId||s.id}</td><td>{s.gender||"—"}</td><td>{s.feeStatus||"—"}</td><td>{s.performancePercent}</td><td>{s.attendancePercent}</td><td><Link className="btn btn-soft" style={{padding:"7px 10px",fontSize:11}} href={"/teacher/students/"+s.id+"?classId="+d.classId}><Eye size={14}/> View</Link></td></tr>)}</tbody></table></div></div><div className="notice"><ShieldCheck size={18}/><span>Attendance is calculated from saved present/absent records. Performance is calculated from published results, with saved test marks used until publication.</span></div></>
+  const qn=query.trim().toLowerCase();
+  const filteredRoster=qn?d.roster.filter(s=>(s.name||"").toLowerCase().includes(qn)||((s.loginId||s.id||"").toLowerCase().includes(qn))):d.roster;
+  const classTitle=c?(c.name+(c.section?" — "+c.section:"")):"Class Dashboard";
+  const classMeta=[c?.academicYear||"Current academic year",d.total+" students"].join("  •  ");
+  return <>
+    <Heading eyebrow="MY CLASSES  •  ACTIVE COHORT" title={classTitle} description={classMeta+" — live gender split and Present / Absent / Leave breakdown with full roster."}><Button href="/teacher/attendance"><ClipboardCheck size={15}/> Take Attendance</Button><Button href="/teacher/notices">Post Class Notice</Button></Heading>
+    <Stats items={[["Enrollment",String(d.total),"Active students"],["Average Attendance",d.attendanceSummary.averagePercent+"%",d.attendanceSummary.studentsWithData+" students with records"],["Boys / Girls",d.genderCounts.M+" / "+d.genderCounts.F,d.genderCounts.O?("Other: "+d.genderCounts.O):"Gender split"],["Marked",String(attendanceTotal),month==="all"?"All-time records":"Records in "+month]]}/>
+    <div className="mt-5 grid gap-5 xl:grid-cols-2">
+      <ChartCard title="Gender ratio" action={<span className="text-xs text-[#57558b]">{genderTotal>0?genderTotal+" students":"Awaiting data"}</span>}>
+        {genderTotal===0?<EmptyState title="No gender data" />:(<DonutChart items={gender} colors={GENDER_COLORS} heightClass="h-64" innerRadius={64} outerRadius={92} />)}
+      </ChartCard>
+      <ChartCard title="Attendance" action={<select className="select" style={{minHeight:34}} value={month} onChange={e=>setMonth(e.target.value)} aria-label="Attendance month"><option value="all">All time</option>{months.map(m=><option key={m} value={m}>{m}</option>)}</select>}>
+        {attQ.isLoading?<Skeleton className="h-64 w-full" />:attQ.isError?<EmptyState title="Unable to load attendance" />:scoped.length===0?<EmptyState title="No attendance data" />:(<DonutChart items={attendanceData} colors={ATTENDANCE_COLORS} heightClass="h-64" innerRadius={64} outerRadius={92} />)}
+      </ChartCard>
+    </div>
+    <div className="panel" style={{marginTop:20}}>
+      <div className="panel-head"><div><h2>Student Roster</h2><span className="muted">{filteredRoster.length} of {d.roster.length} • Sorted by roll number</span></div><span className="tag">{d.total} enrolled</span></div>
+      <div className="toolbar" style={{marginTop:0}}><div className="search-input"><Search size={15}/><input placeholder="Search student name or ID" value={query} onChange={e=>setQuery(e.target.value)} /></div><span className="status">{filteredRoster.length} shown</span></div>
+      {filteredRoster.length===0?<EmptyState title={d.roster.length===0?"No students enrolled":"No students match search"} />:(<div className="table-wrap"><table className="data-table"><thead><tr><th>Roll</th><th>Student Name</th><th>Student ID</th><th>Gender</th><th>Fee Status</th><th>Performance %</th><th>Attendance %</th><th>Profile</th></tr></thead><tbody>{filteredRoster.map(s=><tr key={s.id}><td><span className="muted">#{s.rollNo??"—"}</span></td><td>{s.name}</td><td>{s.loginId||s.id}</td><td>{s.gender||"—"}</td><td>{s.feeStatus||"—"}</td><td>{s.performancePercent}</td><td>{s.attendancePercent}</td><td><Link className="btn btn-soft" style={{padding:"7px 10px",fontSize:11}} href={"/teacher/students/"+s.id+"?classId="+d.classId}><Eye size={14}/> View</Link></td></tr>)}</tbody></table></div>)}
+    </div>
+    <div className="notice"><ShieldCheck size={18}/><span>Attendance is calculated from saved Present / Absent / Leave records. Performance is calculated from published results, with saved test marks used until publication.</span></div>
+  </>;
 }
 
 type MarkStatus="present"|"absent"|"leave";
@@ -289,11 +362,22 @@ function StudentDetail(){
   const cname=classes.data?.find(x=>x.id===classId);
   const records=(att.data||[]).flatMap(d=>d.records.filter(r=>r.studentId===studentId).map(r=>({date:d.date,status:String(r.status)})));
   const present=records.filter(r=>r.status==="present").length;
+  const absentCount=records.filter(r=>r.status==="absent").length;
+  const leaveCount=records.filter(r=>r.status!=="present"&&r.status!=="absent").length;
+  const attendanceItems=[{name:"Present",value:present},{name:"Absent",value:absentCount},{name:"Leave",value:leaveCount}];
   const results=(res.data||[]).map((r,i)=>{const exam=String((r as Record<string,unknown>).exam??("Record "+(i+1)));const subs=Array.isArray((r as Record<string,unknown>).subjects)?((r as Record<string,unknown>).subjects as Array<Record<string,unknown>>).map(s=>String(s.name)+": "+String(s.marks)+"/"+String(s.max)).join(", "):"—";return [exam,subs]});
   const feeRows=(feeQ.data||[]).map(f=>{const o=f as Record<string,unknown>;return [String(o.head??"Fee"),String(o.amount??"—"),String(o.dueDate??"—"),String(o.status??"—")]});
   return <><Heading eyebrow="STUDENT PROFILE" title={student.name} description={(student.loginId||student.id)+"  •  Roll "+(student.rollNo??"—")+"  •  "+(cname?cname.name+(cname.section?" — "+cname.section:""):"Class")}><Button href={"/teacher/classes/"+classId}>Back to Class</Button><Button primary href="/teacher/attendance"><ClipboardCheck size={15}/> Take Attendance</Button></Heading>
   <Stats items={[["Attendance",String(student.attendancePercent)+"%","From class dashboard"],["Performance",String(student.performancePercent)+"%","Tests + exams"],["Fee Status",student.feeStatus||"—","Read-only mirror"],["Records",String(records.length),"Marked entries"]]}/>
-  <div className="panel"><div className="panel-head"><h2>Attendance History</h2><span className="tag">{present}/{records.length} present</span></div>{att.isLoading?<Loading/>:att.isError?<ErrorBox message="Attendance history could not be loaded."/>:records.length===0?<p className="muted">No attendance marked for this student yet.</p>:<Table headers={["Date","Status"]} rows={records.sort((a,b)=>b.date.localeCompare(a.date)).map(r=>[r.date,r.status])}/>}</div>
+  <div className="mt-5 grid gap-5 xl:grid-cols-2">
+      <ChartCard title="Attendance" action={<span className="text-xs text-[#57558b]">{records.length>0?records.length+" marked":"Awaiting data"}</span>}>
+        {att.isLoading?<Skeleton className="h-64 w-full" />:att.isError?<EmptyState title="Unable to load attendance" />:records.length===0?<EmptyState title="No attendance marked for this student yet" />:(<DonutChart items={attendanceItems} colors={ATTENDANCE_COLORS} heightClass="h-64" innerRadius={64} outerRadius={92} />)}
+      </ChartCard>
+      <ChartCard title="Performance" action={<span className="text-xs text-[#57558b]">{student.performancePercent}% overall</span>}>
+        {dash.isLoading?<Skeleton className="h-64 w-full" />:results.length===0&&student.performancePercent===0?<EmptyState title="No published results for this student yet" />:(<PerformanceRing value={student.performancePercent} heightClass="h-64" innerRadius={64} outerRadius={92} />)}
+      </ChartCard>
+    </div>
+  <div className="panel" style={{marginTop:20}}><div className="panel-head"><h2>Attendance History</h2><span className="tag">{present}/{records.length} present</span></div>{att.isLoading?<Loading/>:att.isError?<ErrorBox message="Attendance history could not be loaded."/>:records.length===0?<p className="muted">No attendance marked for this student yet.</p>:<Table headers={["Date","Status"]} rows={records.sort((a,b)=>b.date.localeCompare(a.date)).map(r=>[r.date,r.status])}/>}</div>
   <div className="panel" style={{marginTop:18}}><div className="panel-head"><h2>Examination Results</h2><span className="tag">{results.length} records</span></div>{res.isLoading?<Loading/>:res.isError?<ErrorBox message="Results could not be loaded."/>:results.length===0?<p className="muted">No published results for this student yet.</p>:<Table headers={["Exam","Subjects"]} rows={results}/>}</div>
   <div className="panel" style={{marginTop:18}}><div className="panel-head"><h2>Fee Records</h2><span className="tag">{feeRows.length} records</span></div>{feeQ.isLoading?<Loading/>:feeQ.isError?<ErrorBox message="Fee records could not be loaded."/>:feeRows.length===0?<p className="muted">No fee records for this student yet.</p>:<Table headers={["Head","Amount","Due Date","Status"]} rows={feeRows}/>}</div></>
 }
