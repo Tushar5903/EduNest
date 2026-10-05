@@ -29,7 +29,7 @@ export async function getClassDashboard(req: Request, res: Response, next: NextF
 export async function createStudent(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { teacherId, instituteId } = ctx(req);
-    // tempPassword returned ONCE — never stored or re-readable.
+    // tempPassword generated once at creation and stored stably (admin re-viewable).
     created(res, await teacherService.createStudentInOwnClass(teacherId, instituteId, req.body));
   } catch (err) {
     next(err);

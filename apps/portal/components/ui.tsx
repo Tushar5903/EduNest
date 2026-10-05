@@ -44,7 +44,7 @@ export function Skeleton({ className = "" }: { className?: string }) {
 
 export function ChartCard({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (
-    <div className="rounded-xl border border-[#F5F5F4] bg-white p-4 shadow-sm">
+    <div className="@container rounded-xl border border-[#F5F5F4] bg-white p-4 shadow-sm">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="font-display font-semibold text-[#1C1917]">{title}</h3>
         {action}

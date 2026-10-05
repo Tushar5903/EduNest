@@ -32,7 +32,8 @@ interface SanitizedUser {
   performancePercent: number;
 }
 
-/** Strip hashes/credentials. tempPassword is ONLY ever returned by create/reset. */
+/** Strip hashes/credentials. tempPassword is stored stably and ONLY exposed
+ * via create/reset responses and the admin credentials view — never in lists. */
 export function sanitizeUser(u: UserDoc): SanitizedUser {
   return {
     id: String(u._id),
@@ -83,6 +84,7 @@ export async function createTeacher(adminId: string, instituteId: string, input:
       salaryAmount: input.salaryAmount,
       loginId,
       passwordHash: await hashSecret(tempPassword),
+      tempPassword,
       role: "teacher",
       instituteId: new Types.ObjectId(instituteId),
       status: "active",
@@ -135,6 +137,7 @@ export async function createStudent(adminId: string, instituteId: string, input:
     phone: input.phone ? normalizePhone(input.phone) : undefined,
     loginId,
     passwordHash: await hashSecret(tempPassword),
+    tempPassword,
     role: "student",
     instituteId: new Types.ObjectId(instituteId),
     classId: klass._id,
@@ -226,12 +229,22 @@ export async function getUser(instituteId: string, userId: string) {
   const base = sanitizeUser(user);
   const institute = await Institute.findById(user.instituteId).select("name").lean();
   const withInstitute = { ...base, instituteName: institute?.name ?? "Unknown institute" };
-  if (user.role !== "teacher") return withInstitute;
+  // Stable credential for teacher/student detail views. Legacy accounts created
+  // before tempPassword persistence return null so the UI can prompt one reset.
+  const withCredential =
+    user.role === "teacher" || user.role === "student"
+      ? {
+          ...withInstitute,
+          loginId: user.loginId,
+          tempPassword: user.tempPassword ?? null,
+        }
+      : withInstitute;
+  if (user.role !== "teacher") return withCredential;
   const assigned = await Class.find({ teacherId: user._id, instituteId: user.instituteId, active: true })
     .select("name section academicYear")
     .lean();
   return {
-    ...withInstitute,
+    ...withCredential,
     assignedClasses: assigned.map((c) => ({
       id: String(c._id),
       name: c.name,
@@ -306,14 +319,33 @@ export async function softDeleteUser(adminId: string, instituteId: string, userI
 }
 
 // ---------------------------------------------------------------------------
-// H. Reset password — new one-time credential, old session revoked.
+// H. Credentials — stable read (NO rotation) + explicit reset (rotation).
 // ---------------------------------------------------------------------------
+/** Stable read: returns the stored tempPassword WITHOUT changing it. */
+export async function getCredentials(instituteId: string, userId: string) {
+  const user = await requireUserInInstitute(userId, instituteId);
+  if (!user.active) throw ApiError.notFound("User not found");
+  if (user.role !== "teacher" && user.role !== "student") {
+    throw ApiError.badRequest("Credentials view is only available for teachers and students");
+  }
+  return {
+    id: String(user._id),
+    name: user.name,
+    loginId: user.loginId ?? user.email ?? String(user._id),
+    // Legacy accounts pre-dating tempPassword persistence return null so the
+    // UI can prompt a one-time reset which then becomes the stable value.
+    tempPassword: user.tempPassword ?? null,
+  };
+}
+
+/** Explicit rotation only: new stable credential, old session revoked. */
 export async function resetPassword(adminId: string, instituteId: string, userId: string) {
   const user = await requireUserInInstitute(userId, instituteId);
   if (!user.active) throw ApiError.notFound("User not found");
 
   const tempPassword = generateReferenceId();
   user.passwordHash = await hashSecret(tempPassword);
+  user.tempPassword = tempPassword;
   user.refreshTokenHash = undefined as never;
   await user.save();
   await AuditLog.create({ by: adminId, instituteId, action: "password.reset" });

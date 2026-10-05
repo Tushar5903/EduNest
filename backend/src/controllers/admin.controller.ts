@@ -12,7 +12,7 @@ function ctx(req: Request): { adminId: string; instituteId: string } {
 export async function createTeacher(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { adminId, instituteId } = ctx(req);
-    // tempPassword returned ONCE — never stored or re-readable.
+    // tempPassword generated once at creation, stored stably, re-viewable.
     created(res, await userService.createTeacher(adminId, instituteId, req.body));
   } catch (err) {
     next(err);
@@ -75,8 +75,17 @@ export async function deleteUser(req: Request, res: Response, next: NextFunction
 export async function resetPassword(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { adminId, instituteId } = ctx(req);
-    // New tempPassword returned ONCE.
+    // Explicit rotation only — the new value becomes the stable stored one.
     ok(res, await userService.resetPassword(adminId, instituteId, req.params.id));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getCredentials(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    // Stable read — returns the stored tempPassword WITHOUT rotating it.
+    ok(res, await userService.getCredentials(ctx(req).instituteId, req.params.id));
   } catch (err) {
     next(err);
   }

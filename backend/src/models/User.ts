@@ -9,6 +9,12 @@ export interface UserDoc extends Document {
   /** Global-unique, immutable login: T-XXXX (teacher) / 6-digit (student). Admins use email. */
   loginId?: string;
   passwordHash: string;
+  /**
+   * Stable initial credential for teacher/student, set at creation and on
+   * explicit admin reset. Plain-text by product requirement so the admin can
+   * re-view the same value. Never sent in lists (sanitizeUser/toJSON strip it).
+   */
+  tempPassword?: string;
   role: Role;
   /** Null for super-admin. Immutable after creation. */
   instituteId?: Schema.Types.ObjectId | null;
@@ -37,6 +43,9 @@ const userSchema = new Schema<UserDoc>(
     email: { type: String, lowercase: true, trim: true, sparse: true, unique: true },
     loginId: { type: String, unique: true, sparse: true, immutable: true, uppercase: true, trim: true },
     passwordHash: { type: String, required: true, select: false },
+    // Plain-text by product requirement (admin re-view). Never sent in lists —
+    // sanitizeUser/toJSON strip it; only the credentials view returns it.
+    tempPassword: { type: String },
     role: { type: String, enum: ["super-admin", "admin", "teacher", "student"], required: true, immutable: true },
     instituteId: { type: Schema.Types.ObjectId, ref: "Institute", default: null, immutable: true, index: true },
     classId: { type: Schema.Types.ObjectId, ref: "Class", default: null, index: true },
@@ -85,6 +94,7 @@ userSchema.set("toJSON", {
     const record = ret as unknown as Record<string, unknown>;
     delete record.passwordHash;
     delete record.refreshTokenHash;
+    delete record.tempPassword;
     return ret;
   },
 });

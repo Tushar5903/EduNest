@@ -4,6 +4,7 @@ import {
   createStudent,
   createTeacher,
   deleteUser,
+  getCredentials,
   getUser,
   listStudents,
   listTeachers,
@@ -43,10 +44,13 @@ router.get("/teachers", validateQuery(listUsersQueryValidator), listTeachers);
 router.get("/students", validateQuery(listUsersQueryValidator), listStudents);
 router.get("/users/:id", getUser);
 
+// Stable credential read — same tempPassword every time, no rotation.
+router.get("/users/:id/credentials", getCredentials);
+
 router.patch("/users/:id", validateBody(updateUserValidator), updateUser);
 router.delete("/users/:id", deleteUser);
 
-router.post("/users/:id/reset-password", resetPassword);
+router.post("/users/:id/reset-password", resetPassword); // explicit rotation only
 
 router.patch("/students/:id/remove-class", removeStudentFromClass);
 router.patch("/students/:id/reassign", validateBody(reassignStudentValidator), reassignStudent);

@@ -26,6 +26,29 @@ export function performanceLabel(pct: number): string {
 
 export type DonutItem = { name: string; value: number };
 
+/**
+ * Shared responsive pie layout — one design everywhere.
+ * Desktop (sm and up): pie on the left, labels in a fixed side column.
+ * Mobile: pie centered on top, labels below it — a single column for up to
+ * 3 labels, two label columns when there are more than 3.
+ */
+export function pieLayoutClass(): string {
+  return "flex flex-col items-center gap-4 @sm:flex-row @sm:items-center @sm:gap-2";
+}
+
+export function pieCanvasClass(heightClass: string): string {
+  // NOTE: flex-1 only in side-by-side (row) mode. In stacked (column) mode the
+  // parent height is indefinite, so flex-basis:0% would override the fixed
+  // height class and collapse the canvas to zero height (invisible pie).
+  return `relative min-w-0 w-full ${heightClass} @sm:flex-1`;
+}
+
+export function legendClass(count: number): string {
+  return count > 3
+    ? "grid w-full grid-cols-2 gap-3 @sm:flex @sm:w-[132px] @sm:shrink-0 @sm:flex-col"
+    : "flex w-full flex-col gap-3 @sm:w-[132px] @sm:shrink-0";
+}
+
 const Pie = PieRaw as unknown as React.ComponentType<Record<string, unknown>>;
 const Sector = SectorRaw as unknown as React.ComponentType<Record<string, unknown>>;
 
@@ -39,7 +62,7 @@ export function DonutLegend({ items, colors, activeName, onHover, onSelect }: { 
   const total = items.reduce((sum, item) => sum + item.value, 0);
   const interactive = Boolean(onHover || onSelect);
   return (
-    <div className="flex w-[132px] shrink-0 flex-col gap-3">
+    <div className={legendClass(items.length)}>
       {items.map((entry, index) => {
         const percent = total > 0 ? Math.round((entry.value / total) * 100) : 0;
         const isActive = activeName === entry.name;
@@ -93,8 +116,8 @@ export function PerformanceRing({ value, heightClass = "h-64", innerRadius = 64,
   const label = performanceLabel(pct);
   const data = [{ name: "Score", value: pct }, { name: "Remaining", value: Math.max(0, 100 - pct) }];
   return (
-    <div className="flex items-center gap-2">
-      <div className={`relative min-w-0 flex-1 ${heightClass}`}>
+    <div className={pieLayoutClass()}>
+      <div className={pieCanvasClass(heightClass)}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie data={data} dataKey="value" nameKey="name" innerRadius={innerRadius} outerRadius={outerRadius} paddingAngle={0} startAngle={90} endAngle={-270} stroke="none">
@@ -108,7 +131,9 @@ export function PerformanceRing({ value, heightClass = "h-64", innerRadius = 64,
           <span className="font-display text-3xl font-bold tabular-nums" style={{ color }}>{pct}%</span>
         </div>
       </div>
-      <div className="flex w-[132px] shrink-0 flex-col gap-3">
+      {/* Grade scale legend: desktop side column only — hidden on narrow
+          containers where the ring + center label stand alone. */}
+      <div className="hidden gap-3 @sm:flex @sm:w-[132px] @sm:shrink-0 @sm:flex-col">
         {[
           { name: "Excellent ≥90", swatch: "#15803d" },
           { name: "Good 75–89", swatch: "#4ade80" },
@@ -132,8 +157,8 @@ export function DonutChart({ items, colors, heightClass = "h-64", innerRadius = 
   const sel = useDonutSelection(items, colors);
   if (sel.total === 0) return null;
   return (
-    <div className="flex items-center gap-2">
-      <div className={`relative min-w-0 flex-1 ${heightClass}`}>
+    <div className={pieLayoutClass()}>
+      <div className={pieCanvasClass(heightClass)}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie data={sel.pieData} dataKey="value" nameKey="name" innerRadius={innerRadius} outerRadius={outerRadius} paddingAngle={4} labelLine={false} activeIndex={sel.activeIndex} activeShape={ActiveDonutShape} onMouseEnter={sel.handleEnter} onMouseLeave={sel.handleLeave} onClick={sel.handleClick} style={{ cursor: "pointer" }}>

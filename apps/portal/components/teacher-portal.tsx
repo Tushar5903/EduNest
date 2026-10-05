@@ -148,9 +148,9 @@ function Dashboard(){
         </div>
       </ChartCard>
       <ChartCard title="Gender ratio" action={<span className="text-xs text-[#57558b]">{genderTotal>0?`${genderTotal} students`:"Awaiting data"}</span>}>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col items-center gap-4 @sm:flex-row @sm:items-center @sm:gap-2">
           {loading?<Skeleton className="h-64 w-full" />:genderTotal===0?<EmptyState title={boardsError?"Unable to load student data":"No gender data"} />:(
-            <><div className="relative h-64 min-w-0 flex-1">
+            <><div className="relative h-64 min-w-0 w-full @sm:flex-1">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie data={genderPieData} dataKey="value" nameKey="name" innerRadius={64} outerRadius={92} paddingAngle={4} labelLine={false} activeIndex={activeGenderIndex} activeShape={ActiveDonutShape} onMouseEnter={handleGenderPieEnter} onMouseLeave={handleGenderPieLeave} onClick={handleGenderPieClick} style={{cursor:"pointer"}}>
@@ -184,9 +184,9 @@ function Dashboard(){
         </div>
       </ChartCard>
       <ChartCard title="Attendance overview" action={<span className="text-xs text-[#13855b]">{attendanceTotal>0?`${attendanceTotal} marked`:"Awaiting data"}</span>}>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col items-center gap-4 @sm:flex-row @sm:items-center @sm:gap-2">
           {loading||attendanceLoading?<Skeleton className="h-56 w-full" />:attendanceError?<EmptyState title="Unable to load attendance" />:attendanceTotal===0?<EmptyState title={boardsError?"Unable to load attendance":"No attendance data"} />:(
-            <><div className="relative h-56 min-w-0 flex-1">
+            <><div className="relative h-56 min-w-0 w-full @sm:flex-1">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie data={attendancePieData} dataKey="value" nameKey="name" innerRadius={62} outerRadius={90} paddingAngle={4} activeIndex={activeAttendanceIndex} activeShape={ActiveDonutShape} onMouseEnter={handleAttendancePieEnter} onMouseLeave={handleAttendancePieLeave} onClick={handleAttendancePieClick} style={{cursor:"pointer"}}>
