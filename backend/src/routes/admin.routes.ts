@@ -15,6 +15,7 @@ import {
   setTerminalClass,
   updateUser,
 } from "../controllers/admin.controller.js";
+import { adminAuditStats, listAdminAudits } from "../controllers/audit.controller.js";
 import { adminInbox } from "../controllers/complaint.controller.js";
 import { feeAudit, listFees } from "../controllers/fee.controller.js";
 import { protect } from "../middleware/auth.middleware.js";
@@ -23,6 +24,7 @@ import { allowRoles } from "../middleware/role.middleware.js";
 import { scopeInstitute } from "../middleware/institute.middleware.js";
 import { validateBody, validateQuery } from "../middleware/validation.middleware.js";
 import { terminalClassValidator } from "../validators/class.validator.js";
+import { listAuditQueryValidator } from "../validators/audit.validator.js";
 import {
   assignClassTeacherValidator,
   createStudentValidator,
@@ -64,5 +66,9 @@ router.patch("/settings/terminal-class", validateBody(terminalClassValidator), s
 router.get("/complaints", adminInbox);
 router.get("/fees", listFees);
 router.get("/fees/:id/audit", feeAudit);
+
+// Institute-scoped audit trail for the authenticated admin's own school.
+router.get("/audit-logs/stats", adminAuditStats);
+router.get("/audit-logs", validateQuery(listAuditQueryValidator), listAdminAudits);
 
 export default router;

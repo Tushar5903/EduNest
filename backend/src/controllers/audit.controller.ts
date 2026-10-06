@@ -17,3 +17,19 @@ export async function auditStats(_req: Request, res: Response, next: NextFunctio
     next(err);
   }
 }
+
+export async function listAdminAudits(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    ok(res, await auditService.listAuditEvents(req.query as never, req.user!.instituteId!));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function adminAuditStats(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    ok(res, await auditService.getAuditStats(req.user!.instituteId!));
+  } catch (err) {
+    next(err);
+  }
+}

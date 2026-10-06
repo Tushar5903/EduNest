@@ -70,13 +70,18 @@ function parseLimit(limit?: string): number {
 }
 
 /**
- * Super-admin global audit feed. Newest first, plain array (frontend
- * `listAuditEvents()` expects `AuditEvent[]`, not a paginated envelope).
+ * Audit feed. Newest first, plain array (frontend callers expect
+ * `AuditEvent[]`, not a paginated envelope). Pass `scopedInstituteId` to
+ * force institute scoping (admin self-service); query `instituteId` is
+ * ignored in that case so one school can never read another's logs.
  */
-export async function listAuditEvents(query: ListAuditQuery): Promise<AuditEvent[]> {
+export async function listAuditEvents(query: ListAuditQuery, scopedInstituteId?: string): Promise<AuditEvent[]> {
   const filter: Record<string, unknown> = {};
   if (query.action) filter.action = query.action;
-  if (query.instituteId) {
+  if (scopedInstituteId) {
+    assertObjectId(scopedInstituteId);
+    filter.instituteId = new Types.ObjectId(scopedInstituteId);
+  } else if (query.instituteId) {
     assertObjectId(query.instituteId);
     filter.instituteId = new Types.ObjectId(query.instituteId);
   }
@@ -139,15 +144,20 @@ export async function listAuditEvents(query: ListAuditQuery): Promise<AuditEvent
   });
 }
 
-export async function getAuditStats(): Promise<AuditStats> {
+export async function getAuditStats(scopedInstituteId?: string): Promise<AuditStats> {
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const scope: Record<string, unknown> = {};
+  if (scopedInstituteId) {
+    assertObjectId(scopedInstituteId);
+    scope.instituteId = new Types.ObjectId(scopedInstituteId);
+  }
   const [total, today, byValues, criticalSevenDays] = await Promise.all([
-    AuditLog.countDocuments({}),
-    AuditLog.countDocuments({ createdAt: { $gte: startOfDay } }),
-    AuditLog.distinct("by"),
-    AuditLog.countDocuments({ action: { $in: CRITICAL_ACTIONS }, createdAt: { $gte: sevenDaysAgo } }),
+    AuditLog.countDocuments(scope),
+    AuditLog.countDocuments({ ...scope, createdAt: { $gte: startOfDay } }),
+    AuditLog.distinct("by", scope),
+    AuditLog.countDocuments({ ...scope, action: { $in: CRITICAL_ACTIONS }, createdAt: { $gte: sevenDaysAgo } }),
   ]);
   return {
     total,

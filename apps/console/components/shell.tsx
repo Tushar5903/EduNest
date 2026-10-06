@@ -29,6 +29,7 @@ const ADMIN_NAV = [
   { href: "/admin/notices", label: "Notices", icon: ClipboardList },
   { href: "/admin/complaints", label: "Complaints", icon: ClipboardList },
   { href: "/admin/reports", label: "School Reports", icon: History },
+  { href: "/admin/activity", label: "Activity Log", icon: History },
   { href: "/admin/settings", label: "Settings", icon: ShieldCheck },
 ];
 

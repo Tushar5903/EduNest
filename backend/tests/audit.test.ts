@@ -112,4 +112,26 @@ describe("Audit logs (super-admin feed)", () => {
     const superAgent = await authAgent(process.env.SUPER_EMAIL!, process.env.SUPER_PASSWORD!);
     expect((await superAgent.get("/api/audit-logs").query({ instituteId: "nope" })).status).toBe(400);
   });
+
+  it("admin sees only own institute logs via /api/admin/audit-logs", async () => {
+    const other = await Institute.create({ name: "Other School", code: "OTH001", status: "active" });
+    await AuditLog.create({ by: "super-admin", instituteId: other._id, action: "admin.approved" });
+
+    const adminAgent = await authAgent("audit.admin@test.in", "Admin@123");
+    const res = await adminAgent.get("/api/admin/audit-logs");
+    expect(res.status).toBe(200);
+    expect(res.body.data.length).toBe(2);
+    expect(res.body.data[0].entityName).toBe("Audit School");
+
+    // Override to another institute is denied by institute scoping, never leaks.
+    const sneaky = await adminAgent.get("/api/admin/audit-logs").query({ instituteId: String(other._id) });
+    expect(sneaky.status).toBe(403);
+
+    const stats = await adminAgent.get("/api/admin/audit-logs/stats");
+    expect(stats.status).toBe(200);
+    expect(stats.body.data).toMatchObject({ total: 2 });
+
+    const anon = await request(app).get("/api/admin/audit-logs");
+    expect(anon.status).toBe(401);
+  });
 });
