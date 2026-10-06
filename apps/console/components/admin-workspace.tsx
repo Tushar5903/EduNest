@@ -41,7 +41,7 @@ const routeConfig: Record<string, { title: string; eyebrow: string; description:
   classes: { title: "Classes & Section Management", eyebrow: "Dashboard / People", description: "Review academic divisions, section capacities, mentors, and room assignments.", endpoint: `/classes?academicYear=${CURRENT_ACADEMIC_YEAR}`, icon: BookOpen, columns: ["name", "section", "standard", "feeAmount", "academicYear", "teacherId"] },
   timetable: { title: "Weekly Timetable & Scheduling", eyebrow: "Dashboard / Academic Management", description: "Manage class schedules, teacher allocations, rooms, and conflict-aware schedule slots.", endpoint: "/timetables", icon: CalendarDays, columns: ["day", "startTime", "endTime", "subject", "room"] },
   attendance: { title: "Attendance Management & Monitoring", eyebrow: "Dashboard / Academic Management", description: "Campus-wide attendance verification with date, class, and status filters.", endpoint: "/attendance?date=2024-10-31", icon: ClipboardCheck, columns: ["date", "classId", "status", "markedBy"] },
-  tests: { title: "Examinations & Assessments", eyebrow: "Dashboard / Academic Management", description: "Schedule tests, assign venues, and track assessment progress.", endpoint: "/tests", icon: FileText, columns: ["title", "subject", "date", "maxMarks", "classId"] },
+  tests: { title: "Tests & Assessments", eyebrow: "ACADEMIC PORTAL", description: "Create and review assessments using POST /tests and GET /tests.", endpoint: "/tests", icon: FileText, columns: ["title", "subject", "date", "maxMarks", "classId"] },
   results: { title: "Examination Results & Gradebook", eyebrow: "Dashboard / Academic Management", description: "Review marks, class performance, grade distributions, and publication status.", endpoint: "/results", icon: BarChart3, columns: ["exam", "studentId", "classId", "subjects"] },
   fees: { title: "Fee Management & Accounts", eyebrow: "Dashboard / Finance", description: "Monitor fee collection, outstanding balances, receipts, and payment status.", endpoint: "/fees", icon: WalletCards, columns: ["studentId", "head", "amount", "dueDate", "status"] },
   salary: { title: "Staff Salary & Payroll", eyebrow: "Dashboard / Finance", description: "Manage payroll periods, salary records, deductions, and disbursement status.", endpoint: `/salary?month=${CURRENT_PAYROLL_MONTH}`, icon: DollarSign, columns: ["teacherId", "month", "amount", "status", "paidAt"] },
@@ -55,6 +55,20 @@ function asText(value: RecordValue | object): string {
   if (value === null || value === undefined) return "—";
   if (typeof value === "object") return Array.isArray(value) ? `${value.length} items` : "Configured";
   return String(value);
+}
+
+function formatNoticeDate(value: RecordValue | object): string {
+  const raw = asText(value);
+  if (!raw || raw === "—") return "—";
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return raw;
+  return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+}
+
+function noticeAudienceLabel(value: RecordValue | object): string {
+  const raw = asText(value).toLowerCase();
+  if (!raw || raw === "—") return "General";
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
 }
 
 function responseRows(data: ResourceResponse | undefined): Row[] {
@@ -270,6 +284,18 @@ function ViewModal({ kind, row, onClose, classById = new Map(), teacherById = ne
   return <div className="fixed inset-0 z-50 grid place-items-center bg-[#0f0e47]/50 p-4"><section role="dialog" aria-modal="true" className="max-h-[88vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"><div className="flex items-start justify-between"><div><div className="text-xs font-semibold uppercase tracking-wider text-[#77749d]">Record details</div><h2 className="mt-1 font-display text-xl font-bold text-[#151444]">{routeConfig[kind].title}</h2></div><button onClick={onClose} aria-label="Close details" className="rounded-lg p-2 hover:bg-[#f5f3ff]"><XCircle size={20} /></button></div>{detail.isLoading ? <Skeleton className="mt-6 h-32 w-full" /> : <div className="mt-6 grid gap-3 sm:grid-cols-2">{Object.entries(values).filter(([key]) => !["passwordHash", "canDelete", "feeStatus", "performancePercent", "instituteId"].includes(key)).map(([key, value]) => <div key={key} className="rounded-xl bg-[#f7f5ff] p-3"><div className="text-[11px] font-semibold uppercase tracking-wider text-[#77749d]">{key.replace(/([A-Z])/g, " $1")}</div><div className="mt-1 break-words text-sm font-semibold text-[#272757]">{detailValue(key, value)}</div></div>)}</div>}<div className="mt-6 flex justify-end"><button onClick={onClose} className="rounded-xl bg-[#272757] px-4 py-2.5 text-sm font-semibold text-white">Close</button></div></section></div>;
 }
 
+function NoticeViewModal({ row, onClose, classById = new Map() }: { row: Row; onClose: () => void; classById?: Map<string, string> }) {
+  const title = asText(row.title) === "—" ? "Untitled notice" : asText(row.title);
+  const audience = noticeAudienceLabel(row.audience);
+  const createdAt = formatNoticeDate(row.createdAt);
+  const ids = Array.isArray(row.classIds) ? row.classIds.map(String).filter((v) => v && v !== "—") : [];
+  const singleId = asText(row.classId);
+  const names = ids.length ? ids.map((id) => classById.get(id) ?? id) : singleId && singleId !== "—" ? [classById.get(singleId) ?? singleId] : [];
+  const className = names.length ? names.join(" • ") : "All Classes";
+  const body = asText(row.body) === "—" ? "No description." : asText(row.body);
+  return <div className="fixed inset-0 z-50 grid place-items-center bg-[#0f0e47]/50 p-4"><section role="dialog" aria-modal="true" aria-label="Notice details" className="max-h-[88vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"><div className="flex items-start justify-between gap-4"><div><div className="text-xs font-semibold uppercase tracking-wider text-[#77749d]">Notice details</div><h2 className="mt-1 break-words font-display text-xl font-bold text-[#151444]">{title}</h2></div><button onClick={onClose} aria-label="Close details" className="rounded-lg p-2 hover:bg-[#f5f3ff]"><XCircle size={20} /></button></div><div className="mt-6 space-y-3"><div className="rounded-xl bg-[#f7f5ff] p-3"><div className="text-[11px] font-semibold uppercase tracking-wider text-[#77749d]">Title</div><div className="mt-1 break-words text-sm font-semibold text-[#272757]">{title}</div></div><div className="grid gap-3 sm:grid-cols-2"><div className="rounded-xl bg-[#f7f5ff] p-3"><div className="text-[11px] font-semibold uppercase tracking-wider text-[#77749d]">Audience</div><div className="mt-1"><span className="inline-flex rounded-full bg-[#eeecff] px-2.5 py-0.5 text-xs font-semibold text-[#4f4c91]">{audience}</span></div></div><div className="rounded-xl bg-[#f7f5ff] p-3"><div className="text-[11px] font-semibold uppercase tracking-wider text-[#77749d]">Created at</div><div className="mt-1 break-words text-sm font-semibold text-[#272757]">{createdAt}</div></div></div><div className="rounded-xl bg-[#f7f5ff] p-3"><div className="text-[11px] font-semibold uppercase tracking-wider text-[#77749d]">Class name</div><div className="mt-1 break-words text-sm font-semibold text-[#272757]">{className}</div></div><div className="rounded-xl bg-[#f7f5ff] p-3"><div className="text-[11px] font-semibold uppercase tracking-wider text-[#77749d]">Notice</div><div className="mt-1 break-words whitespace-pre-wrap text-sm leading-6 text-[#272757]">{body}</div></div></div><div className="mt-6 flex justify-end"><button onClick={onClose} className="rounded-xl bg-[#272757] px-4 py-2.5 text-sm font-semibold text-white">Close</button></div></section></div>;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function LegacyInteractiveResourcePage({ kind }: { kind: string }) {
   const config = routeConfig[kind];
@@ -395,6 +421,172 @@ function StudentClassAssignment({ row, classOptions, onRefresh }: { row: Row; cl
   return <select multiple defaultValue={selected} onChange={(event) => void update(event)} className="h-10 max-w-[170px] rounded-lg bg-[#f0efff] px-2 py-1 text-xs" aria-label="Assign multiple student classes">{classOptions.map((item, index) => <option key={String(item.id ?? index)} value={asText(item.id)}>{asText(item.name)}{item.section ? ` — ${asText(item.section)}` : ""}</option>)}</select>;
 }
 
+function AdminTestsPage() {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const [classFilter, setClassFilter] = useState("");
+  const [search, setSearch] = useState("");
+  const [classId, setClassId] = useState("");
+  const [subject, setSubject] = useState("");
+  const [title, setTitle] = useState("");
+  const [date, setDate] = useState("");
+  const [maxMarks, setMaxMarks] = useState("40");
+  const [saving, setSaving] = useState(false);
+
+  const classesQuery = useQuery({ queryKey: ["admin-tests-classes"], queryFn: () => api<ResourceResponse>(`/classes?academicYear=${CURRENT_ACADEMIC_YEAR}`) });
+  const testsQuery = useQuery({ queryKey: ["admin-resource", "/tests"], queryFn: () => api<ResourceResponse>("/tests") });
+  const resultsQuery = useQuery({ queryKey: ["admin-tests-results"], queryFn: () => api<ResourceResponse>("/results") });
+
+  const classes = responseRows(classesQuery.data);
+  const classById = useMemo(() => new Map(classes.map((row) => [asText(row.id), `${asText(row.name)}${row.standard ? ` · Standard ${asText(row.standard)}` : ""}${row.section ? ` — Section ${asText(row.section)}` : ""}`])), [classes]);
+  const allTests = responseRows(testsQuery.data);
+  const history = responseRows(resultsQuery.data);
+  const historyExams = useMemo(() => new Set(history.map((r) => asText(r.exam))), [history]);
+  const pending = useMemo(() => allTests.filter((t) => !historyExams.has(asText(t.title))), [allTests, historyExams]);
+  const completed = useMemo(() => allTests.filter((t) => historyExams.has(asText(t.title))), [allTests, historyExams]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return allTests.filter((row) => {
+      if (classFilter && asText(row.classId) !== classFilter) return false;
+      if (q && !JSON.stringify(row).toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [allTests, classFilter, search]);
+
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: ["admin-resource", "/tests"] });
+    void queryClient.invalidateQueries({ queryKey: ["admin-tests-results"] });
+  };
+
+  async function createAssessment() {
+    if (!classId || !title || !subject || !date) {
+      toast.error("Fill class, subject, title and date first");
+      return;
+    }
+    setSaving(true);
+    try {
+      await apiPost("/tests", { classId, subject, title, date, maxMarks: Number(maxMarks) || 40 });
+      toast.success("Assessment created in the backend.");
+      setSubject("");
+      setTitle("");
+      setDate("");
+      refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not create assessment");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const createDisabled = saving || testsQuery.isPending || !classId || !title || !subject || !date;
+
+  return (
+    <div>
+      <div className="page-heading">
+        <div>
+          <div className="eyebrow">ACADEMIC PORTAL</div>
+          <h1>Tests &amp; Assessments</h1>
+          <p>Create and review assessments using POST /tests and GET /tests.</p>
+        </div>
+        <div className="actions">
+          <button className="btn btn-plain" onClick={() => window.print()}>
+            <Download size={15} /> Export
+          </button>
+          <button className="btn btn-primary" onClick={() => void createAssessment()} disabled={createDisabled}>
+            <Plus size={15} /> Create Assessment
+          </button>
+        </div>
+      </div>
+
+      <div className="stat-grid">
+        <div className="stat-card"><div className="stat-label">Total Tests</div><div className="stat-value">{testsQuery.isLoading ? "…" : String(allTests.length)}</div><div className="stat-hint">Live assessments</div></div>
+        <div className="stat-card"><div className="stat-label">Pending</div><div className="stat-value">{testsQuery.isLoading || resultsQuery.isLoading ? "…" : String(pending.length)}</div><div className="stat-hint">Without published results</div></div>
+        <div className="stat-card"><div className="stat-label">Published</div><div className="stat-value">{resultsQuery.isLoading ? "…" : String(historyExams.size)}</div><div className="stat-hint">Result records present</div></div>
+        <div className="stat-card"><div className="stat-label">Classes</div><div className="stat-value">{classesQuery.isLoading ? "…" : String(classes.length)}</div><div className="stat-hint">Academic scope</div></div>
+      </div>
+
+      <div className="panel">
+        <div className="form-grid">
+          <div className="field">
+            <label>Class *</label>
+            <select className="select" value={classId} onChange={(e) => setClassId(e.target.value)}>
+              <option value="">Select class</option>
+              {classes.map((c, i) => (
+                <option key={String(c.id ?? i)} value={asText(c.id)}>{asText(c.name)}{c.section ? ` — ${asText(c.section)}` : ""}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field"><label>Subject *</label><input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Mathematics" /></div>
+          <div className="field"><label>Test title *</label><input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Unit Test 3" /></div>
+          <div className="field"><label>Exam date *</label><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
+          <div className="field"><label>Maximum marks *</label><input type="number" min="1" value={maxMarks} onChange={(e) => setMaxMarks(e.target.value)} /></div>
+        </div>
+      </div>
+
+      <div className="panel" style={{ marginTop: 18 }}>
+        <div className="panel-head"><h2>Live assessments</h2><span className="tag">{filtered.length} records</span></div>
+        <div className="toolbar" style={{ marginTop: 0 }}>
+          <div className="search-input"><Search size={15} /><input placeholder="Search live records…" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
+          <select className="select" value={classFilter} onChange={(e) => setClassFilter(e.target.value)} aria-label="Filter by class">
+            <option value="">All Classes</option>
+            {classes.map((c, i) => (
+              <option key={String(c.id ?? i)} value={asText(c.id)}>{asText(c.name)}{c.standard ? ` · ${asText(c.standard)}` : ""}{c.section ? ` — ${asText(c.section)}` : ""}</option>
+            ))}
+          </select>
+          <button className="btn btn-plain" style={{ padding: "7px 10px", fontSize: 11 }} onClick={refresh}><MoreHorizontal size={14} /> Refresh</button>
+        </div>
+        {testsQuery.isLoading ? (
+          <div className="panel" style={{ marginTop: 12 }}><p className="t-muted">Loading live data…</p></div>
+        ) : testsQuery.isError ? (
+          <div className="notice"><ShieldAlert size={18} /><span>Assessments could not be loaded.</span></div>
+        ) : filtered.length === 0 ? (
+          <div className="notice"><ShieldAlert size={18} /><span>{allTests.length === 0 ? "No assessments yet — create one above." : "No assessments match the current search or class filter."}</span></div>
+        ) : (
+          <>
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead><tr><th>Title</th><th>Subject</th><th>Date</th><th>Max Marks</th><th>Class</th><th>Marks entry</th><th>Actions</th></tr></thead>
+                <tbody>
+                  {filtered.map((t, i) => {
+                    const id = asText(t.id);
+                    const cls = classById.get(asText(t.classId)) ?? asText(t.classId);
+                    const isDone = historyExams.has(asText(t.title));
+                    return (
+                      <tr key={id !== "—" ? id : i}>
+                        <td>{asText(t.title)}</td>
+                        <td>{asText(t.subject)}</td>
+                        <td>{asText(t.date)}</td>
+                        <td>{asText(t.maxMarks)}</td>
+                        <td>{cls}</td>
+                        <td>{isDone ? <span className="status">Published</span> : <span className="status warn">Open marks entry</span>}</td>
+                        <td>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button className="btn btn-soft" style={{ padding: "7px 10px", fontSize: 11 }} onClick={() => router.push(`/admin/tests/${id}`)}>Enter Marks</button>
+                            <button className="btn btn-plain" style={{ padding: "7px 10px", fontSize: 11 }} onClick={() => router.push(`/admin/tests/${id}`)}>View <ArrowUpRight size={14} /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 12, flexWrap: "wrap", gap: 8 }}>
+              <span className="t-muted" style={{ fontSize: 12 }}>Showing {filtered.length} of {allTests.length} records · {pending.length} pending · {completed.length} published</span>
+              <div className="actions">
+                <button className="btn btn-plain" style={{ padding: "7px 10px", fontSize: 11 }}>1</button>
+                <button className="btn btn-plain" style={{ padding: "7px 10px", fontSize: 11 }}>2</button>
+                <button className="btn btn-plain" style={{ padding: "7px 10px", fontSize: 11 }}>Next</button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function InteractiveResourcePage({ kind }: { kind: string }) {
   const config = routeConfig[kind];
   const searchParams = useSearchParams();
@@ -413,7 +605,7 @@ function InteractiveResourcePage({ kind }: { kind: string }) {
     return () => window.removeEventListener("edunest:student-class-filter", onClassFilter);
   }, []);
   const query = useResource(resourceEndpoint);
-  const classQuery = useQuery({ queryKey: ["resource-lookup", "classes"], queryFn: () => api<ResourceResponse>(`/classes?academicYear=${CURRENT_ACADEMIC_YEAR}`), enabled: kind === "students" || kind === "timetable" || kind === "tests" });
+  const classQuery = useQuery({ queryKey: ["resource-lookup", "classes"], queryFn: () => api<ResourceResponse>(`/classes?academicYear=${CURRENT_ACADEMIC_YEAR}`), enabled: kind === "students" || kind === "timetable" || kind === "tests" || kind === "notices" });
   const teacherQuery = useQuery({ queryKey: ["resource-lookup", "teachers"], queryFn: () => api<ResourceResponse>("/admin/teachers?page=1&limit=100"), enabled: kind === "classes" || kind === "timetable" || kind === "salary" });
   const studentQuery = useQuery({ queryKey: ["resource-lookup", "students"], queryFn: () => api<ResourceResponse>("/admin/students?page=1&limit=100"), enabled: kind === "fees" || kind === "results" });
   const classOptions = responseRows(classQuery.data);
@@ -441,7 +633,7 @@ function InteractiveResourcePage({ kind }: { kind: string }) {
   const label = (column: string) => ({ classId: "Class", teacherId: "Teacher", studentId: "Student", status: kind === "salary" ? "Salary Status" : kind === "fees" ? "Fee Status" : "Status" }[column] ?? column.replace(/([A-Z])/g, " $1"));
   const refresh = () => { void queryClient.invalidateQueries({ queryKey: ["admin-resource", resourceEndpoint] }); void queryClient.invalidateQueries({ queryKey: ["admin-notices"] }); };
   const actionLabel = ({ students: "Add Student", teachers: "Add Teacher", classes: "Add Class", tests: "Add Test", fees: "Add Fee Record", salary: "Add Salary Record", notices: "Create Notice", timetable: "Add Timetable", attendance: "Mark Attendance", results: "Add Result" } as Record<string, string>)[kind] ?? "Create";
-  return <div><Header title={config.title} eyebrow={config.eyebrow} description={config.description} icon={config.icon} onAction={() => setCreateOpen(true)} /><div className="grid grid-cols-2 gap-4 xl:grid-cols-4"><StatCard title="Records returned" value={query.data && !Array.isArray(query.data) && "total" in query.data && typeof query.data.total === "number" ? String(query.data.total) : query.isLoading ? "…" : String(rows.length)} hint="Scoped to the authenticated institute" /><StatCard title="Active filters" value={[search, statusFilter, yearFilter].filter(Boolean).length.toString()} hint="Search and dropdown filters" /><StatCard title="Data source" value="Live API" hint="No browser-side database" /><StatCard title="Sync status" value={query.isError ? "Error" : "Ready"} hint={query.isError ? "Check API availability" : "Authenticated request"} /></div><InteractiveFilters onSearch={setSearch} onStatus={setStatusFilter} onYear={setYearFilter} /><div className="overflow-hidden rounded-2xl border border-[#e6e2f8] bg-white shadow-sm"><div className="flex items-center justify-between border-b border-[#ece9f8] p-5"><div><h2 className="font-display text-lg font-bold text-[#151444]">{config.title.replace("Directory", "Ledger")}</h2><p className="text-xs text-[#77748d]">Server-side records from the EduNest API</p></div><button onClick={refresh} className="rounded-lg p-2 text-[#77749d] hover:bg-[#f5f3ff]" aria-label="Refresh records"><MoreHorizontal size={18} /></button></div>{query.isLoading ? <div className="space-y-3 p-5"><Skeleton className="h-10 w-full" /><Skeleton className="h-10 w-full" /><Skeleton className="h-10 w-full" /></div> : query.isError ? <EmptyState title="Unable to load this resource" hint="The API request failed. Check the backend and try again." /> : rows.length === 0 ? <EmptyState title="No records available" hint="The backend returned an empty result for the current filters." /> : <div className="overflow-x-auto"><table className="w-full min-w-[980px] text-left text-sm"><thead className="bg-[#f5f3ff] text-[11px] uppercase tracking-wider text-[#77749d]"><tr><th className="px-5 py-3">Select</th>{columns.map((column) => <th key={column} className="px-5 py-3">{label(column)}</th>)}<th className="px-5 py-3">Actions</th></tr></thead><tbody>{rows.map((row, index) => <tr key={String(row.id ?? index)} className="border-t border-[#efedf8] hover:bg-[#fbfaff]"><td className="px-5 py-4"><input type="checkbox" aria-label={`Select row ${index + 1}`} /></td>{columns.map((column) => <td key={column} className="max-w-[230px] truncate px-5 py-4 text-[#35325f]">{column === "status" ? <StatusBadge status={asText(row[column]).replaceAll("_", "-")} /> : displayValue(row, column)}</td>)}<td className="px-5 py-4"><RecordActions kind={kind} row={row} classOptions={classOptions} teacherOptions={teacherOptions} onRefresh={refresh} onView={() => kind === "classes" ? router.push(`/admin/classes/${asText(row.id)}`) : kind === "tests" ? router.push(`/admin/tests/${asText(row.id)}`) : setSelectedRow(row)} /></td></tr>)}</tbody></table></div>}<div className="flex items-center justify-between border-t border-[#ece9f8] px-5 py-4 text-xs text-[#77748d]"><span>Showing {rows.length} records from the API</span><div className="flex gap-1"><button className="rounded-lg bg-[#272757] px-3 py-1.5 font-semibold text-white">1</button><button className="rounded-lg bg-[#f0efff] px-3 py-1.5">2</button><button className="rounded-lg bg-[#f0efff] px-3 py-1.5">Next</button></div></div></div>{createOpen ? <CreateModal kind={kind} onClose={() => setCreateOpen(false)} onCreated={refresh} /> : null}{selectedRow ? <ViewModal kind={kind} row={selectedRow} classById={classById} teacherById={teacherById} studentById={studentById} onClose={() => setSelectedRow(null)} /> : null}</div>;
+  return <div><Header title={config.title} eyebrow={config.eyebrow} description={config.description} icon={config.icon} onAction={() => setCreateOpen(true)} /><div className="grid grid-cols-2 gap-4 xl:grid-cols-4"><StatCard title="Records returned" value={query.data && !Array.isArray(query.data) && "total" in query.data && typeof query.data.total === "number" ? String(query.data.total) : query.isLoading ? "…" : String(rows.length)} hint="Scoped to the authenticated institute" /><StatCard title="Active filters" value={[search, statusFilter, yearFilter].filter(Boolean).length.toString()} hint="Search and dropdown filters" /><StatCard title="Data source" value="Live API" hint="No browser-side database" /><StatCard title="Sync status" value={query.isError ? "Error" : "Ready"} hint={query.isError ? "Check API availability" : "Authenticated request"} /></div><InteractiveFilters onSearch={setSearch} onStatus={setStatusFilter} onYear={setYearFilter} /><div className="overflow-hidden rounded-2xl border border-[#e6e2f8] bg-white shadow-sm"><div className="flex items-center justify-between border-b border-[#ece9f8] p-5"><div><h2 className="font-display text-lg font-bold text-[#151444]">{config.title.replace("Directory", "Ledger")}</h2><p className="text-xs text-[#77748d]">Server-side records from the EduNest API</p></div><button onClick={refresh} className="rounded-lg p-2 text-[#77749d] hover:bg-[#f5f3ff]" aria-label="Refresh records"><MoreHorizontal size={18} /></button></div>{query.isLoading ? <div className="space-y-3 p-5"><Skeleton className="h-10 w-full" /><Skeleton className="h-10 w-full" /><Skeleton className="h-10 w-full" /></div> : query.isError ? <EmptyState title="Unable to load this resource" hint="The API request failed. Check the backend and try again." /> : rows.length === 0 ? <EmptyState title="No records available" hint="The backend returned an empty result for the current filters." /> : <div className="overflow-x-auto"><table className="w-full min-w-[980px] text-left text-sm"><thead className="bg-[#f5f3ff] text-[11px] uppercase tracking-wider text-[#77749d]"><tr><th className="px-5 py-3">Select</th>{columns.map((column) => <th key={column} className="px-5 py-3">{label(column)}</th>)}<th className="px-5 py-3">Actions</th></tr></thead><tbody>{rows.map((row, index) => <tr key={String(row.id ?? index)} className="border-t border-[#efedf8] hover:bg-[#fbfaff]"><td className="px-5 py-4"><input type="checkbox" aria-label={`Select row ${index + 1}`} /></td>{columns.map((column) => <td key={column} className="max-w-[230px] truncate px-5 py-4 text-[#35325f]">{column === "status" ? <StatusBadge status={asText(row[column]).replaceAll("_", "-")} /> : displayValue(row, column)}</td>)}<td className="px-5 py-4"><RecordActions kind={kind} row={row} classOptions={classOptions} teacherOptions={teacherOptions} onRefresh={refresh} onView={() => kind === "classes" ? router.push(`/admin/classes/${asText(row.id)}`) : kind === "tests" ? router.push(`/admin/tests/${asText(row.id)}`) : setSelectedRow(row)} /></td></tr>)}</tbody></table></div>}<div className="flex items-center justify-between border-t border-[#ece9f8] px-5 py-4 text-xs text-[#77748d]"><span>Showing {rows.length} records from the API</span><div className="flex gap-1"><button className="rounded-lg bg-[#272757] px-3 py-1.5 font-semibold text-white">1</button><button className="rounded-lg bg-[#f0efff] px-3 py-1.5">2</button><button className="rounded-lg bg-[#f0efff] px-3 py-1.5">Next</button></div></div></div>{createOpen ? <CreateModal kind={kind} onClose={() => setCreateOpen(false)} onCreated={refresh} /> : null}{selectedRow ? (kind === "notices" ? <NoticeViewModal row={selectedRow} classById={classById} onClose={() => setSelectedRow(null)} /> : <ViewModal kind={kind} row={selectedRow} classById={classById} teacherById={teacherById} studentById={studentById} onClose={() => setSelectedRow(null)} />) : null}</div>;
 }
 
 // Kept as a compatibility fallback for older callers while the interactive
@@ -464,12 +656,15 @@ function ResourcePage({ kind }: { kind: string }) {
 }
 
 function DashboardPage() {
+  const router = useRouter();
+  const queryClient = useQueryClient();
   const report = useQuery({ queryKey: ["admin-report"], queryFn: () => api<Report>("/admin/reports/school") });
-  const notices = useQuery({ queryKey: ["admin-notices"], queryFn: () => api<ListResponse>("/notices?limit=5") });
+  const notices = useQuery({ queryKey: ["admin-notices"], queryFn: () => api<ResourceResponse>("/notices?limit=5") });
+  const noticeRows = responseRows(notices.data).slice(0, 5);
   const r = report.data;
   const gender = r ? ["M", "F", "O"].map((name) => ({ name: name === "M" ? "Male" : name === "F" ? "Female" : "Other", value: r.gender[name] ?? 0 })) : [];
   const trend = r ? [{ name: "Enrolled", value: r.headcounts.students }, { name: "Teachers", value: r.headcounts.teachers }, { name: "Classes", value: r.headcounts.classes }] : [];
-  return <div><Header title="Admin Dashboard" eyebrow="EduNest / Admin Workspace" description="A live overview of your institution’s people, academic operations, and financial health." action="Quick Action" /><div className="grid grid-cols-2 gap-4 xl:grid-cols-5">{[["Total Students", r?.headcounts.students], ["Total Teachers", r?.headcounts.teachers], ["Total Classes", r?.headcounts.classes], ["Fee Collection", r ? `${r.fees.percent}%` : undefined], ["Complaints", r?.complaints]].map(([title, value]) => <StatCard key={String(title)} title={String(title)} value={value === undefined ? "…" : String(value)} hint={report.isError ? "API unavailable" : "Live school report"} />)}</div><div className="mt-5 grid gap-5 xl:grid-cols-[1.7fr_1fr]"><ChartCard title="Institution Headcount"><div className="h-64">{report.isLoading ? <Skeleton className="h-full w-full" /> : <ResponsiveContainer width="100%" height="100%"><AreaChart data={trend}><CartesianGrid stroke="#ebe8fa" vertical={false} /><XAxis dataKey="name" stroke="#8783a7" /><YAxis stroke="#8783a7" /><Tooltip /><Area type="monotone" dataKey="value" stroke="#272757" fill="#dfddfa" strokeWidth={3} /></AreaChart></ResponsiveContainer>}</div></ChartCard><ChartCard title="Student profile">{(() => { const _t = gender.reduce((s: number, d: { value: number }) => s + d.value, 0); return gender.length && _t > 0 ? (<DonutChart items={gender} colors={GENDER_COLORS} heightClass="h-64" innerRadius={64} outerRadius={92} />) : (<EmptyState title="No gender data" />); })()}</ChartCard></div><div className="mt-5 grid gap-5 xl:grid-cols-[1.35fr_1fr]"><ChartCard title="Financial health" action={<span className="text-xs text-[#13855b]">{r ? `${r.fees.percent}% realized` : "Awaiting data"}</span>}><div className="h-56">{r ? <ResponsiveContainer width="100%" height="100%"><BarChart data={[{ name: "Collected", amount: r.fees.collected }, { name: "Outstanding", amount: Math.max(0, r.fees.totalDue - r.fees.collected) }]}><CartesianGrid stroke="#ebe8fa" vertical={false} /><XAxis dataKey="name" /><YAxis /><Tooltip /><Bar dataKey="amount" fill="#272757" radius={[8, 8, 0, 0]} /></BarChart></ResponsiveContainer> : <EmptyState title="No fee aggregation available" hint="The report API did not return fee totals." />}</div></ChartCard><ChartCard title="Recent notices" action={<button className="text-xs font-semibold text-[#4f4c91]">View all</button>}>{notices.isLoading ? <Skeleton className="h-40 w-full" /> : notices.data?.data?.length ? <div className="space-y-3">{notices.data.data.slice(0, 4).map((notice, index) => <div key={String(notice.id ?? index)} className="rounded-xl bg-[#f7f5ff] p-3"><div className="font-semibold text-[#272757]">{asText(notice.title)}</div><div className="mt-1 line-clamp-2 text-xs text-[#77748d]">{asText(notice.body)}</div></div>)}</div> : <EmptyState title="No notices returned" />}</ChartCard></div><div className="mt-5 rounded-2xl border border-[#e6e2f8] bg-[#272757] p-5 text-white"><div className="flex items-start gap-3"><ShieldAlert className="mt-0.5 text-[#bdbaff]" /><div><h2 className="font-display text-lg font-bold">Backend-connected workspace</h2><p className="mt-1 text-sm text-[#d0cef1]">Every value above is sourced from the authenticated EduNest API. Unsupported aggregations remain explicitly unavailable until their backend contracts are added.</p></div></div></div></div>;
+  return <div><Header title="Admin Dashboard" eyebrow="EduNest / Admin Workspace" description="A live overview of your institution’s people, academic operations, and financial health." action="Quick Action" /><div className="grid grid-cols-2 gap-4 xl:grid-cols-5">{[["Total Students", r?.headcounts.students], ["Total Teachers", r?.headcounts.teachers], ["Total Classes", r?.headcounts.classes], ["Fee Collection", r ? `${r.fees.percent}%` : undefined], ["Complaints", r?.complaints]].map(([title, value]) => <StatCard key={String(title)} title={String(title)} value={value === undefined ? "…" : String(value)} hint={report.isError ? "API unavailable" : "Live school report"} />)}</div><div className="mt-5 grid gap-5 xl:grid-cols-[1.7fr_1fr]"><ChartCard title="Institution Headcount"><div className="h-64">{report.isLoading ? <Skeleton className="h-full w-full" /> : <ResponsiveContainer width="100%" height="100%"><AreaChart data={trend}><CartesianGrid stroke="#ebe8fa" vertical={false} /><XAxis dataKey="name" stroke="#8783a7" /><YAxis stroke="#8783a7" /><Tooltip /><Area type="monotone" dataKey="value" stroke="#272757" fill="#dfddfa" strokeWidth={3} /></AreaChart></ResponsiveContainer>}</div></ChartCard><ChartCard title="Student profile">{(() => { const _t = gender.reduce((s: number, d: { value: number }) => s + d.value, 0); return gender.length && _t > 0 ? (<DonutChart items={gender} colors={GENDER_COLORS} heightClass="h-64" innerRadius={64} outerRadius={92} />) : (<EmptyState title="No gender data" />); })()}</ChartCard></div><div className="mt-5 grid gap-5 xl:grid-cols-[1.35fr_1fr]"><ChartCard title="Financial health" action={<span className="text-xs text-[#13855b]">{r ? `${r.fees.percent}% realized` : "Awaiting data"}</span>}><div className="h-56">{r ? <ResponsiveContainer width="100%" height="100%"><BarChart data={[{ name: "Collected", amount: r.fees.collected }, { name: "Outstanding", amount: Math.max(0, r.fees.totalDue - r.fees.collected) }]}><CartesianGrid stroke="#ebe8fa" vertical={false} /><XAxis dataKey="name" /><YAxis /><Tooltip /><Bar dataKey="amount" fill="#272757" radius={[8, 8, 0, 0]} /></BarChart></ResponsiveContainer> : <EmptyState title="No fee aggregation available" hint="The report API did not return fee totals." />}</div></ChartCard><ChartCard title="Recent notices" action={<div className="flex items-center gap-3"><button onClick={() => void queryClient.invalidateQueries({ queryKey: ["admin-notices"] })} className="text-xs font-semibold text-[#77749d] hover:underline">Refresh</button><button onClick={() => router.push("/admin/notices")} className="text-xs font-semibold text-[#4f4c91] hover:underline">View all</button></div>}>{notices.isLoading ? <Skeleton className="h-40 w-full" /> : notices.isError ? <div className="space-y-3"><EmptyState title="Unable to load notices" hint={notices.error instanceof Error ? notices.error.message : "The notices request failed. Check login and try again."} /><button onClick={() => void queryClient.invalidateQueries({ queryKey: ["admin-notices"] })} className="rounded-xl bg-[#272757] px-4 py-2 text-xs font-semibold text-white">Retry</button></div> : noticeRows.length ? <div className="max-h-[420px] space-y-3 overflow-y-auto pr-1">{noticeRows.map((notice, index) => <div key={String(notice.id ?? index)} className="rounded-xl bg-[#f7f5ff] p-3"><div className="flex items-start justify-between gap-2"><div className="break-words font-semibold text-[#272757]">{asText(notice.title) === "—" ? "Untitled notice" : asText(notice.title)}</div><span className="shrink-0 rounded-full bg-[#eeecff] px-2 py-0.5 text-[11px] font-semibold text-[#4f4c91]">{noticeAudienceLabel(notice.audience)}</span></div><div className="mt-1 break-words text-xs leading-5 text-[#55527a]">{asText(notice.body) === "—" ? "No description." : asText(notice.body)}</div><div className="mt-2 text-[11px] text-[#9995b1]">{formatNoticeDate(notice.createdAt)}</div></div>)}</div> : <div className="space-y-3"><EmptyState title="No notices yet" hint="Publish the first notice for this institute." /><button onClick={() => router.push("/admin/notices")} className="rounded-xl bg-[#272757] px-4 py-2 text-xs font-semibold text-white">Create Notice</button></div>}</ChartCard></div><div className="mt-5 rounded-2xl border border-[#e6e2f8] bg-[#272757] p-5 text-white"><div className="flex items-start gap-3"><ShieldAlert className="mt-0.5 text-[#bdbaff]" /><div><h2 className="font-display text-lg font-bold">Backend-connected workspace</h2><p className="mt-1 text-sm text-[#d0cef1]">Every value above is sourced from the authenticated EduNest API. Unsupported aggregations remain explicitly unavailable until their backend contracts are added.</p></div></div></div></div>;
 }
 
 function ResultsPage() {
@@ -546,7 +741,7 @@ export function TestPerformance({ testId }: { testId: string }) {
   const totalMax = assessed.reduce((sum, r) => sum + r.max, 0);
   const average = totalMax > 0 ? (totalMarks / totalMax) * 100 : 0;
   const percents = assessed.map((r) => r.percent);
-  return <div><div className="mb-5 rounded-2xl border border-[#e6e2f8] bg-white p-6 shadow-sm"><button onClick={() => router.push("/admin/tests")} className="mb-3 text-sm font-semibold text-[#4f4c91] hover:underline">← Back to tests</button><div className="text-xs font-semibold uppercase tracking-[.16em] text-[#77749d]">Dashboard / Tests / Test performance</div><h1 className="mt-1 font-display text-2xl font-bold text-[#151444]">{test ? asText(test.title) : exam || "Test performance"}</h1><p className="mt-1 text-sm text-[#77748d]">Class {className} · {subject} · {date === "—" ? "Date not provided" : date} · Max marks {maxMarks || "—"}</p></div>{testsQuery.isLoading ? <Skeleton className="h-48 w-full" /> : !test && !exam ? <EmptyState title="Test not found" hint="This test is unavailable in the current institute." /> : <><div className="grid grid-cols-2 gap-4 xl:grid-cols-4"><StatCard title="Students assessed" value={`${assessed.length} / ${roster.length}`} hint="Published result records" /><StatCard title="Class average" value={assessed.length ? `${average.toFixed(1)}%` : "—"} hint="Whole-test performance" /><StatCard title="Highest" value={assessed.length ? `${Math.max(...percents)}%` : "—"} hint="Top score" /><StatCard title="Lowest" value={assessed.length ? `${Math.min(...percents)}%` : "—"} hint="Lowest score" /></div><div className="mt-5 grid gap-5 xl:grid-cols-2"><ChartCard title="Performance" action={<span className="text-xs text-[#57558b]">{Math.round(average)}% overall</span>}><div className="h-64">{resultsQuery.isLoading ? <Skeleton className="h-64 w-full" /> : assessed.length === 0 ? <EmptyState title="No published results yet" hint="Publish marks for this test to see performance here." /> : <PerformanceRing value={average} heightClass="h-64" innerRadius={64} outerRadius={92} />}</div></ChartCard><ChartCard title="Assessment summary"><div className="space-y-3 pt-2">{[["Exam", test ? asText(test.title) : exam || "—"], ["Class", className], ["Subject", subject], ["Students assessed", `${assessed.length} of ${roster.length}`]].map(([k, v]) => <div key={k} className="flex items-center justify-between rounded-xl bg-[#f7f5ff] px-4 py-3 text-sm"><span className="font-semibold text-[#77749d]">{k}</span><span className="font-bold text-[#272757]">{v}</span></div>)}</div></ChartCard></div><div className="mt-5 overflow-hidden rounded-2xl border border-[#e6e2f8] bg-white shadow-sm"><div className="flex items-center justify-between border-b border-[#ece9f8] p-5"><div><h2 className="font-display text-lg font-bold text-[#151444]">Student Marks</h2><p className="text-xs text-[#77748d]">Every student in the class with their marks for this test</p></div><span className="rounded-full bg-[#eeecff] px-3 py-1 text-xs font-semibold text-[#272757]">{assessed.length} assessed</span></div>{rosterQuery.isLoading ? <div className="space-y-3 p-5"><Skeleton className="h-10 w-full" /><Skeleton className="h-10 w-full" /></div> : roster.length === 0 ? <div className="p-5"><EmptyState title="No students in this class" /></div> : <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead className="bg-[#f5f3ff] text-[11px] uppercase tracking-wider text-[#77749d]"><tr><th className="px-4 py-3">Roll No.</th><th className="px-4 py-3">Student Name</th><th className="px-4 py-3">Marks</th><th className="px-4 py-3">Percentage</th><th className="px-4 py-3">Status</th></tr></thead><tbody>{rows.sort((a, b) => b.percent - a.percent).map((r) => <tr key={r.id} className="border-t border-[#ece9f8]"><td className="px-4 py-3 text-[#77748d]">#{r.rollNo}</td><td className="px-4 py-3 font-semibold text-[#272757]">{r.name}</td><td className="px-4 py-3">{r.assessed ? `${r.marks} / ${r.max}` : "—"}</td><td className="px-4 py-3">{r.assessed ? `${r.percent}%` : "—"}</td><td className="px-4 py-3"><span className={`rounded-full px-3 py-1 text-xs font-semibold ${r.assessed ? "bg-[#e7f7f0] text-[#137451]" : "bg-[#fff6dc] text-[#946d11]"}`}>{r.assessed ? "Assessed" : "Pending"}</span></td></tr>)}</tbody></table></div>}</div></>}</div>;
+  return <div><div className="page-heading"><div><div className="eyebrow">ACADEMIC PORTAL</div><h1>{test ? asText(test.title) : exam || "Test performance"}</h1><p>Class {className} · {subject} · {date === "—" ? "Date not provided" : date} · Max marks {maxMarks || "—"}</p></div><div className="actions"><button onClick={() => router.push("/admin/tests")} className="btn btn-plain">Back to tests</button><button onClick={() => window.print()} className="btn btn-plain"><Download size={15} /> Export</button></div></div>{testsQuery.isLoading ? <Skeleton className="h-48 w-full" /> : !test && !exam ? <EmptyState title="Test not found" hint="This test is unavailable in the current institute." /> : <><div className="stat-grid"><div className="stat-card"><div className="stat-label">Students assessed</div><div className="stat-value">{`${assessed.length} / ${roster.length}`}</div><div className="stat-hint">Published result records</div></div><div className="stat-card"><div className="stat-label">Class average</div><div className="stat-value">{assessed.length ? `${average.toFixed(1)}%` : "—"}</div><div className="stat-hint">Whole-test performance</div></div><div className="stat-card"><div className="stat-label">Highest</div><div className="stat-value">{assessed.length ? `${Math.max(...percents)}%` : "—"}</div><div className="stat-hint">Top score</div></div><div className="stat-card"><div className="stat-label">Lowest</div><div className="stat-value">{assessed.length ? `${Math.min(...percents)}%` : "—"}</div><div className="stat-hint">Lowest score</div></div></div><div className="mt-5 grid gap-5 xl:grid-cols-2"><ChartCard title="Performance" action={<span className="text-xs text-[#57558b]">{Math.round(average)}% overall</span>}><div className="h-64">{resultsQuery.isLoading ? <Skeleton className="h-64 w-full" /> : assessed.length === 0 ? <EmptyState title="No published results yet" hint="Publish marks for this test to see performance here." /> : <PerformanceRing value={average} heightClass="h-64" innerRadius={64} outerRadius={92} />}</div></ChartCard><ChartCard title="Assessment summary"><div className="space-y-3 pt-2">{[["Exam", test ? asText(test.title) : exam || "—"], ["Class", className], ["Subject", subject], ["Students assessed", `${assessed.length} of ${roster.length}`]].map(([k, v]) => <div key={k} className="flex items-center justify-between rounded-xl bg-[#f7f5ff] px-4 py-3 text-sm"><span className="font-semibold text-[#77749d]">{k}</span><span className="font-bold text-[#272757]">{v}</span></div>)}</div></ChartCard></div><div className="panel" style={{ marginTop: 18 }}><div className="panel-head"><div><h2>Student Marks</h2><span className="t-muted" style={{ fontSize: 12 }}>Every student in the class with their marks for this test</span></div><span className="tag">{assessed.length} assessed</span></div>{rosterQuery.isLoading ? <div className="space-y-3 p-5"><Skeleton className="h-10 w-full" /><Skeleton className="h-10 w-full" /></div> : roster.length === 0 ? <div className="p-5"><EmptyState title="No students in this class" /></div> : <div className="table-wrap"><table className="data-table"><thead><tr><th>Roll No.</th><th>Student Name</th><th>Marks</th><th>Percentage</th><th>Status</th></tr></thead><tbody>{rows.sort((a, b) => b.percent - a.percent).map((r) => <tr key={r.id}><td><span className="t-muted">#{r.rollNo}</span></td><td>{r.name}</td><td>{r.assessed ? `${r.marks} / ${r.max}` : "—"}</td><td>{r.assessed ? `${r.percent}%` : "—"}</td><td>{r.assessed ? <span className="status">Assessed</span> : <span className="status warn">Pending</span>}</td></tr>)}</tbody></table></div>}</div></>}</div>;
 }
 
 function ReportsPage() {
@@ -570,30 +765,6 @@ function TimetableCalendarPage() {
   return <div><Header title="Monthly Timetable Calendar" eyebrow="Dashboard / Academic Management" description="View every scheduled class by teaching day, subject, room, and time." action="Create Schedule Slot" onAction={() => setCreateOpen(true)} /><div className="mb-5 flex items-center justify-between rounded-2xl border border-[#e6e2f8] bg-white p-4"><label className="text-sm font-semibold text-[#35325f]">Calendar month<input type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="ml-3 h-10 rounded-xl border border-[#ddd9f4] bg-[#f8f7ff] px-3 text-sm font-normal" /></label><button onClick={() => void queryClient.invalidateQueries({ queryKey: ["timetable-calendar", month] })} className="rounded-xl bg-[#272757] px-4 py-2.5 text-sm font-semibold text-white">Refresh</button></div><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{days.map((day) => <section key={day} className="min-h-[230px] rounded-2xl border border-[#e6e2f8] bg-white p-4 shadow-sm"><div className="flex items-center justify-between border-b border-[#efedf8] pb-3"><h2 className="font-display font-bold text-[#272757]">{day}</h2><span className="rounded-full bg-[#eeecff] px-2 py-1 text-xs text-[#4f4c91]">{daySlots(day).length} slots</span></div><div className="mt-3 space-y-2">{daySlots(day).map((slot, index) => <div key={String(slot.id ?? index)} className="rounded-xl bg-[#f5f3ff] p-3"><div className="flex justify-between text-xs font-bold text-[#272757]"><span>{asText(slot.startTime)} – {asText(slot.endTime)}</span><span>{asText(slot.room)}</span></div><div className="mt-1 text-sm font-semibold text-[#35325f]">{asText(slot.subject)}</div><div className="mt-1 text-xs text-[#77748d]">{classNames.get(asText(slot.classId)) ?? "Class unavailable"} · {teacherNames.get(asText(slot.teacherId)) ?? "Teacher unavailable"}</div></div>)}{!daySlots(day).length ? <p className="py-8 text-center text-sm text-[#9995b1]">No classes scheduled</p> : null}</div></section>)}</div>{createOpen ? <CreateModal kind="timetable" onClose={() => setCreateOpen(false)} onCreated={() => void queryClient.invalidateQueries({ queryKey: ["timetable-calendar", month] })} /> : null}</div>;
 }
 
-function ClassDashboardContent({ classId }: { classId: string }) {
-  const router = useRouter();
-  const classQuery = useQuery({ queryKey: ["class-dashboard", classId], queryFn: () => api<Row>(`/classes/${classId}`) });
-  const studentsQuery = useQuery({ queryKey: ["class-dashboard-students", classId], queryFn: () => api<ResourceResponse>(`/admin/students?page=1&limit=100&classId=${classId}`) });
-  const attendanceQuery = useQuery({ queryKey: ["class-dashboard-attendance", classId], queryFn: () => api<ResourceResponse>(`/attendance?classId=${classId}`) });
-  const resultsQuery = useQuery({ queryKey: ["class-dashboard-results", classId], queryFn: () => api<ResourceResponse>(`/results?classId=${classId}`) });
-  const testsQuery = useQuery({ queryKey: ["class-dashboard-tests", classId], queryFn: () => api<ResourceResponse>(`/tests?classId=${classId}`) });
-  const klass = classQuery.data ?? {};
-  const students = responseRows(studentsQuery.data);
-  const attendance = responseRows(attendanceQuery.data);
-  const results = responseRows(resultsQuery.data);
-  const tests = responseRows(testsQuery.data);
-  void tests;
-  const present = attendance.filter((row) => ["present", "late"].includes(asText(row.status).toLowerCase())).length;
-  const absent = attendance.filter((row) => asText(row.status).toLowerCase() === "absent").length;
-  const attendanceTotal = present + absent;
-  const leave = attendance.filter((row) => asText(row.status).toLowerCase() === "leave").length;
-  const attendanceData = [{ name: "Present", value: present }, { name: "Absent", value: absent }, { name: "Leave", value: leave }];
-  const genderData = ["M", "F", "O"].map((gender) => ({ name: gender === "M" ? "Male" : gender === "F" ? "Female" : "Other", value: students.filter((student) => asText(student.gender) === gender).length }));
-  const percentages = results.map((row) => Number(row.percentage ?? row.percent ?? row.score ?? 0)).filter((value) => Number.isFinite(value) && value > 0);
-  const average = percentages.length ? percentages.reduce((sum, value) => sum + value, 0) / percentages.length : 0;
-  return <div><div className="mb-5 flex items-center justify-between rounded-2xl border border-[#e6e2f8] bg-white p-5 shadow-sm"><div><button onClick={() => router.push("/admin/classes")} className="mb-3 text-sm font-semibold text-[#4f4c91] hover:underline">← Back to classes</button><div className="text-xs font-semibold uppercase tracking-[.16em] text-[#77749d]">Dashboard / Classes / Class dashboard</div><h1 className="mt-1 font-display text-2xl font-bold text-[#151444]">{asText(klass.name)}{klass.section ? ` — Section ${asText(klass.section)}` : ""}</h1><p className="mt-1 text-sm text-[#77748d]">Standard {asText(klass.standard)} · Academic year {asText(klass.academicYear)} · Monthly fee ₹{asText(klass.feeAmount)}</p></div><button onClick={() => void Promise.all([classQuery.refetch(), studentsQuery.refetch(), attendanceQuery.refetch(), resultsQuery.refetch()])} className="rounded-xl bg-[#272757] px-4 py-2.5 text-sm font-semibold text-white">Refresh dashboard</button></div>{classQuery.isLoading ? <Skeleton className="h-48 w-full" /> : <><div className="grid grid-cols-2 gap-4 xl:grid-cols-4"><StatCard title="Total students" value={String(students.length)} hint="Active class roster" /><StatCard title="Attendance" value={attendanceTotal ? `${Math.round((present / attendanceTotal) * 100)}%` : "—"} hint={`${present} present records`} /><StatCard title="Average performance" value={average ? `${average.toFixed(1)}%` : "—"} hint={`${results.length} result records`} /><StatCard title="Class fee" value={`₹${asText(klass.feeAmount)}`} hint="Per assigned class / month" /></div><div className="mt-5 grid gap-5 xl:grid-cols-2"><ChartCard title="Attendance overview">{attendanceTotal ? (<DonutChart items={attendanceData} colors={ATTENDANCE_COLORS} heightClass="h-64" innerRadius={62} outerRadius={90} />) : (<EmptyState title="No attendance data" />)}</ChartCard><ChartCard title="Student gender profile"><div className="h-64"><ResponsiveContainer width="100%" height="100%"><BarChart data={genderData}><CartesianGrid stroke="#ebe8fa" vertical={false} /><XAxis dataKey="name" /><YAxis allowDecimals={false} /><Tooltip /><Bar dataKey="value" fill="#272757" radius={[8, 8, 0, 0]} /></BarChart></ResponsiveContainer></div></ChartCard></div><div className="mt-5 rounded-2xl border border-[#e6e2f8] bg-white shadow-sm"><div className="flex items-center justify-between border-b border-[#ece9f8] p-5"><div><h2 className="font-display text-lg font-bold text-[#151444]">Class roster & performance</h2><p className="text-xs text-[#77748d]">Student names, status, attendance and academic result data</p></div><span className="rounded-full bg-[#eeecff] px-3 py-1 text-xs font-semibold text-[#272757]">{students.length} students</span></div>{students.length ? <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-[#f5f3ff] text-[11px] uppercase tracking-wider text-[#77749d]"><tr><th className="px-5 py-3">Student</th><th className="px-5 py-3">Roll no</th><th className="px-5 py-3">Gender</th><th className="px-5 py-3">Status</th><th className="px-5 py-3">Actions</th></tr></thead><tbody>{students.map((student, index) => <tr key={String(student.id ?? index)} className="border-t border-[#efedf8]"><td className="px-5 py-4 font-semibold text-[#272757]">{asText(student.name)}</td><td className="px-5 py-4">{asText(student.rollNo)}</td><td className="px-5 py-4">{({ M: "Male", F: "Female", O: "Other" }[asText(student.gender)] ?? "—")}</td><td className="px-5 py-4"><StatusBadge status={asText(student.status)} /></td><td className="px-5 py-4"><button onClick={() => router.push("/admin/students")} className="font-semibold text-[#4f4c91] hover:underline">Open student</button></td></tr>)}</tbody></table></div> : <EmptyState title="No students assigned" hint="Assign students to this class to populate the dashboard." />}</div></>}</div>;
-}
-
 function StudentActions({ row, onRefresh, onView }: { row: Row; onRefresh: () => void; onView: () => void }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const id = asText(row.id);
@@ -610,54 +781,6 @@ function TeacherActions({ row, onRefresh, onView }: { row: Row; onRefresh: () =>
 
 function ConfirmDialog({ title, body, confirmLabel, onCancel, onConfirm }: { title: string; body: string; confirmLabel: string; onCancel: () => void; onConfirm: () => void }) {
   return <div className="fixed inset-0 z-[60] grid place-items-center bg-[#0f0e47]/55 p-4" role="dialog" aria-modal="true"><div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"><h2 className="font-display text-lg font-bold text-[#151444]">{title}</h2><p className="mt-2 text-sm leading-6 text-[#77748d]">{body}</p><div className="mt-6 flex justify-end gap-2"><button onClick={onCancel} className="rounded-xl bg-[#f0efff] px-4 py-2.5 text-sm font-semibold text-[#272757]">Cancel</button><button onClick={onConfirm} className="rounded-xl bg-[#b42318] px-4 py-2.5 text-sm font-semibold text-white">{confirmLabel}</button></div></div></div>;
-}
-
-function ClassAssignmentModal({ classId, onClose, onCreated }: { classId: string; onClose: () => void; onCreated: () => void }) {
-  const studentsQuery = useQuery({ queryKey: ["class-assignment-students"], queryFn: () => api<ResourceResponse>("/admin/students?page=1&limit=100") });
-  const [studentId, setStudentId] = useState("");
-  const [saving, setSaving] = useState(false);
-  const available = responseRows(studentsQuery.data).filter((student) => {
-    const ids = Array.isArray(student.classIds) ? student.classIds.map(String) : [asText(student.classId)];
-    return !ids.includes(classId);
-  });
-  async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!studentId) return;
-    setSaving(true);
-    try { await apiPatch(`/admin/students/${studentId}/reassign`, { classId }); toast.success("Student assigned to this class"); onCreated(); onClose(); } catch (error) { toast.error(error instanceof Error ? error.message : "Unable to assign student"); } finally { setSaving(false); }
-  }
-  return <div className="fixed inset-0 z-50 grid place-items-center bg-[#0f0e47]/50 p-4"><form onSubmit={submit} className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"><div className="flex items-start justify-between"><div><div className="text-xs font-semibold uppercase tracking-wider text-[#77749d]">Class dashboard</div><h2 className="mt-1 font-display text-xl font-bold text-[#151444]">Assign existing student</h2></div><button type="button" onClick={onClose} aria-label="Close dialog"><XCircle size={20} /></button></div><p className="mt-2 text-sm text-[#77748d]">Choose an existing student to add to this class. Their other class assignments remain unchanged.</p><label className="mt-5 block text-sm font-semibold text-[#35325f]">Student<select required value={studentId} onChange={(event) => setStudentId(event.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-[#ddd9f4] bg-[#faf9ff] px-3 text-sm font-normal"><option value="">{studentsQuery.isLoading ? "Loading students…" : "Select a student"}</option>{available.map((student, index) => <option key={String(student.id ?? index)} value={asText(student.id)}>{asText(student.name)}{student.loginId ? ` — ${asText(student.loginId)}` : ""}</option>)}</select></label><div className="mt-6 flex justify-end gap-2"><button type="button" onClick={onClose} className="rounded-xl bg-[#f0efff] px-4 py-2.5 text-sm font-semibold text-[#272757]">Cancel</button><button disabled={saving || !studentId} className="rounded-xl bg-[#272757] px-4 py-2.5 text-sm font-semibold text-white">{saving ? "Assigning…" : "Assign student"}</button></div></form></div>;
-}
-
-function SetClassFeeModal({ classId, currentFee, onClose, onSaved }: { classId: string; currentFee: string; onClose: () => void; onSaved: () => void }) {
-  const [fee, setFee] = useState(currentFee === "—" ? "" : currentFee);
-  const [saving, setSaving] = useState(false);
-  async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const amount = Number(fee);
-    if (!Number.isFinite(amount) || amount < 0) { toast.error("Enter a valid non-negative fee"); return; }
-    setSaving(true);
-    try { await apiPatch(`/classes/${classId}`, { feeAmount: amount }); toast.success("Class fee updated"); onSaved(); onClose(); } catch (error) { toast.error(error instanceof Error ? error.message : "Unable to update class fee"); } finally { setSaving(false); }
-  }
-  return <div className="fixed inset-0 z-50 grid place-items-center bg-[#0f0e47]/50 p-4"><form onSubmit={submit} className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"><div className="flex items-start justify-between"><div><div className="text-xs font-semibold uppercase tracking-wider text-[#77749d]">Class dashboard</div><h2 className="mt-1 font-display text-xl font-bold text-[#151444]">Set monthly fee</h2></div><button type="button" onClick={onClose} aria-label="Close dialog"><XCircle size={20} /></button></div><label className="mt-5 block text-sm font-semibold text-[#35325f]">Monthly fee<input required min="0" step="0.01" type="number" value={fee} onChange={(event) => setFee(event.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-[#ddd9f4] px-3 text-sm font-normal" /></label><p className="mt-2 text-xs text-[#77748d]">Current fee: ₹{currentFee}</p><div className="mt-6 flex justify-end gap-2"><button type="button" onClick={onClose} className="rounded-xl bg-[#f0efff] px-4 py-2.5 text-sm font-semibold text-[#272757]">Cancel</button><button disabled={saving} className="rounded-xl bg-[#272757] px-4 py-2.5 text-sm font-semibold text-white">{saving ? "Saving…" : "Save fee"}</button></div></form></div>;
-}
-
-function ClassDashboardExtras({ classId }: { classId: string }) {
-  const studentsQuery = useQuery({ queryKey: ["class-dashboard-students", classId], queryFn: () => api<ResourceResponse>(`/admin/students?page=1&limit=100&classId=${classId}`) });
-  const testsQuery = useQuery({ queryKey: ["class-dashboard-tests", classId], queryFn: () => api<ResourceResponse>(`/tests?classId=${classId}`) });
-  const students = responseRows(studentsQuery.data); const tests = responseRows(testsQuery.data);
-  const gender = ["M", "F", "O"].map((code) => ({ name: code === "M" ? "Male" : code === "F" ? "Female" : "Other", value: students.filter((student) => asText(student.gender) === code).length }));
-  return <div className="mt-5 grid gap-5 xl:grid-cols-2"><ChartCard title="Student gender profile">{(() => { const _t = gender.reduce((s: number, d: { value: number }) => s + d.value, 0); return students.length && _t > 0 ? (<DonutChart items={gender} colors={GENDER_COLORS} heightClass="h-64" innerRadius={62} outerRadius={90} />) : (<EmptyState title="No student gender data" />); })()}</ChartCard><div className="rounded-2xl border border-[#e6e2f8] bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><h2 className="font-display text-lg font-bold text-[#151444]">Tests & assessments</h2><span className="rounded-full bg-[#eeecff] px-3 py-1 text-xs font-semibold text-[#272757]">{tests.length} tests</span></div><p className="mt-1 text-sm text-[#77748d]">Tests scheduled for this class.</p><div className="mt-4 space-y-2">{tests.slice(0, 5).map((test, index) => <div key={String(test.id ?? index)} className="flex items-center justify-between rounded-xl bg-[#f7f5ff] px-3 py-2 text-sm"><span className="font-semibold text-[#35325f]">{asText(test.title)}</span><span className="text-xs text-[#77749d]">{asText(test.subject)} · {asText(test.maxMarks)} marks</span></div>)}{!tests.length ? <EmptyState title="No tests scheduled" hint="Create a test for this class to see it here." /> : null}</div></div></div>;
-}
-
-export function ClassDashboard({ classId }: { classId: string }) {
-  const router = useRouter();
-  const queryClient = useQueryClient();
-  const [assignOpen, setAssignOpen] = useState(false);
-  const [feeOpen, setFeeOpen] = useState(false);
-  const classQuery = useQuery({ queryKey: ["class-dashboard", classId], queryFn: () => api<Row>(`/classes/${classId}`) });
-  const refresh = () => { void queryClient.invalidateQueries({ queryKey: ["class-dashboard", classId] }); void queryClient.invalidateQueries({ queryKey: ["class-dashboard-students", classId] }); };
-  return <div><div className="mb-4 flex justify-end gap-2"><button onClick={() => router.push(`/admin/students?classId=${classId}&create=1`)} className="rounded-xl bg-[#272757] px-4 py-2.5 text-sm font-semibold text-white">Add new student</button><button onClick={() => setAssignOpen(true)} className="rounded-xl bg-[#f0efff] px-4 py-2.5 text-sm font-semibold text-[#272757]">Assign existing student</button><button onClick={() => setFeeOpen(true)} className="rounded-xl border border-[#ddd9f4] bg-white px-4 py-2.5 text-sm font-semibold text-[#272757]">Set Fee</button></div><ClassDashboardContent classId={classId} /><ClassDashboardExtras classId={classId} />{assignOpen ? <ClassAssignmentModal classId={classId} onClose={() => setAssignOpen(false)} onCreated={refresh} /> : null}{feeOpen ? <SetClassFeeModal classId={classId} currentFee={asText(classQuery.data?.feeAmount)} onClose={() => setFeeOpen(false)} onSaved={refresh} /> : null}</div>;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -783,6 +906,7 @@ export default function AdminWorkspace({ kind }: { kind: string }) {
   if (kind === "reports") return <ReportsPage />;
   if (kind === "timetable") return <TimetableCalendarPage />;
   if (kind === "results") return <ResultsPage />;
+  if (kind === "tests") return <AdminTestsPage />;
   if (kind === "settings") return <WorkingSettingsPage />;
   return <InteractiveResourcePage kind={kind} />;
 }

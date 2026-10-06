@@ -98,9 +98,11 @@ export interface AuditEvent {
   id: string;
   timestamp: string;
   actor: string;
+  actorName?: string;
   action: string;
   entityType: string;
   entityId: string;
+  entityName?: string;
   severity: AuditSeverity;
   justification?: string;
   diffBefore?: Record<string, unknown>;
@@ -117,8 +119,8 @@ export interface AuditStats {
   criticalSevenDays: number;
 }
 
-export async function listAuditEvents(): Promise<AuditEvent[]> {
-  return api<AuditEvent[]>("/audit-logs");
+export async function listAuditEvents(date?: string): Promise<AuditEvent[]> {
+  return api<AuditEvent[]>(`/audit-logs${date ? `?date=${encodeURIComponent(date)}` : ""}`);
 }
 
 export async function getAuditStats(): Promise<AuditStats> {
