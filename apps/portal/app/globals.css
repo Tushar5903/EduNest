@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./student.css";
 .modal-backdrop{position:fixed;inset:0;z-index:60;display:grid;place-items:center;background:#0b0a2e99;padding:18px}.modal-card{width:min(100%,420px);background:#fff;border:1px solid var(--line);border-radius:14px;padding:24px;box-shadow:0 22px 70px #0b0a2e33}.modal-card h2{margin:0;font:700 20px var(--font-display)}.modal-card p{color:var(--muted);line-height:1.5;margin:10px 0 20px}
 @theme { --font-sans:"Inter",ui-sans-serif,system-ui,sans-serif; --font-display:"Plus Jakarta Sans","Inter",ui-sans-serif,sans-serif; }
 :root{--navy:#111044;--navy2:#201c5b;--ink:#10103b;--muted:#686894;--lav:#f3f1ff;--line:#e8e7f4;--green:#0da889;--orange:#e9a12b;--red:#dd4051}

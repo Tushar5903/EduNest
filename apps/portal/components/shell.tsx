@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Bell, BookOpen, ChevronDown, CircleUserRound, ClipboardCheck, FileText, GraduationCap, LogOut, Menu, MessageSquare, NotebookTabs, ReceiptText, Search, Settings2, ShieldCheck, Users, WalletCards, Grid2X2, X } from "lucide-react";
 import { getMe, logout, type SessionUser } from "@/lib/auth";
+import { StudentShell } from "@/components/student-portal";
 
 const TEACHER_NAV = [
   { href: "/teacher/dashboard", label: "Dashboard", icon: Grid2X2 },
@@ -52,7 +53,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     document.title = `${title.replace(/\b\w/g, (character) => character.toUpperCase())} · EduNest Portal`;
   }, [pathname]);
 
-  if (pathname === "/login" || !pathname.startsWith("/teacher")) return <>{children}</>;
+  if (pathname === "/login") return <>{children}</>;
+  if (pathname.startsWith("/student")) return <StudentShell user={user}>{children}</StudentShell>;
+  if (!pathname.startsWith("/teacher")) return <>{children}</>;
 
   const sidebarWidth = collapsed ? "lg:pl-[78px]" : "lg:pl-[300px]";
   const pageTitle = TEACHER_NAV.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))?.label ?? "Dashboard";
