@@ -146,16 +146,28 @@ export async function teacherInbox(teacherId: string, instituteId: string) {
     instituteId: new Types.ObjectId(instituteId),
     toType: "teacher",
     toTeacherId: new Types.ObjectId(teacherId),
-  }).sort({ createdAt: -1 });
-  return rows.map((c) => ({
-    id: String(c._id),
-    status: c.status,
-    subject: c.subject,
-    category: c.category,
-    body: c.body,
-    replies: c.replies,
-    createdAt: c.createdAt,
-  }));
+  })
+    .sort({ createdAt: -1 })
+    .populate<{ fromStudentId: { _id: unknown; name?: string; loginId?: string } | null }>({
+      path: "fromStudentId",
+      select: "name loginId",
+    })
+    .lean();
+  return rows.map((c) => {
+    const student = (c.fromStudentId ?? null) as { _id?: unknown; name?: string; loginId?: string } | null;
+    return {
+      id: String(c._id),
+      status: c.status,
+      subject: c.subject,
+      category: c.category,
+      body: c.body,
+      replies: c.replies,
+      createdAt: c.createdAt,
+      studentId: student?._id ? String(student._id) : undefined,
+      studentName: student?.name ?? undefined,
+      studentLoginId: student?.loginId ?? undefined,
+    };
+  });
 }
 
 /** Admin: all own-institute (admin full + teacher mirror read-only — mirror flagged by caller). */
