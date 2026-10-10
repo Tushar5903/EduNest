@@ -230,7 +230,7 @@ describe("Student portal", () => {
     expect(JSON.stringify(inbox.body)).not.toContain("Admin only complaint");
   });
 
-  it("fees read-only: student sees own, cannot modify; teacher limited", async () => {
+  it("fees read-only: student sees own, cannot modify; teacher marks paid", async () => {
     const { Fee } = await import("../src/models/Fee.js");
     const fee = await Fee.create({
       instituteId: new mongoose.Types.ObjectId(instituteId),
@@ -243,8 +243,43 @@ describe("Student portal", () => {
     expect(mine.body.data.due).toBe(5000);
     expect((await agent.patch(`/api/fees/${String(fee._id)}`).send({ amount: 1 })).status).toBe(403);
     const { agent: tAgent } = await authAgent("9999999999", "Teacher@123");
-    const marked = await tAgent.patch(`/api/teacher/fees/${String(fee._id)}/status`).send({ status: "submitted", remark: "collected" });
+    const marked = await tAgent.patch(`/api/teacher/fees/${String(fee._id)}/status`).send({ status: "paid", remark: "cash collected" });
     expect(marked.status).toBe(200);
+    expect(marked.body.data.status).toBe("paid");
+  });
+
+  it("fees auto-overdue on read; manual overdue rejected; paid by teacher and admin", async () => {
+    const { Fee } = await import("../src/models/Fee.js");
+    const { FeeAudit } = await import("../src/models/Fee.js");
+    const { hashSecret: hs } = await import("../src/utils/password.js");
+    await User.create({
+      name: "Admin One", loginId: "A-9001", passwordHash: await hs("Admin@123"),
+      role: "admin", instituteId: new mongoose.Types.ObjectId(instituteId), phone: "8888888888", status: "active",
+    });
+    const past = await Fee.create({
+      instituteId: new mongoose.Types.ObjectId(instituteId),
+      studentId: new mongoose.Types.ObjectId(student1Id),
+      amount: 1000, dueDate: "2020-01-01", status: "pending",
+    });
+    const { agent: tAgent } = await authAgent("9999999999", "Teacher@123");
+    const list = await tAgent.get("/api/fees");
+    expect(list.status).toBe(200);
+    const row = (list.body.data as Array<{ id: string; status: string }>).find((f) => f.id === String(past._id));
+    expect(row?.status).toBe("overdue");
+    expect(await FeeAudit.countDocuments({ feeId: past._id, newStatus: "overdue" })).toBe(1);
+    const { agent: aAgent } = await authAgent("A-9001", "Admin@123");
+    expect((await aAgent.patch(`/api/fees/${String(past._id)}`).send({ status: "overdue" })).status).toBe(400);
+    const viaTeacher = await tAgent.patch(`/api/teacher/fees/${String(past._id)}/status`).send({ status: "paid" });
+    expect(viaTeacher.status).toBe(200);
+    expect(viaTeacher.body.data.status).toBe("paid");
+    const fresh = await Fee.create({
+      instituteId: new mongoose.Types.ObjectId(instituteId),
+      studentId: new mongoose.Types.ObjectId(student1Id),
+      amount: 2000, dueDate: "2026-10-10", status: "pending",
+    });
+    const viaAdmin = await aAgent.patch(`/api/fees/${String(fresh._id)}`).send({ status: "paid" });
+    expect(viaAdmin.status).toBe(200);
+    expect(viaAdmin.body.data.status).toBe("paid");
   });
 
   it("results read-only with teacher join; institute isolation", async () => {

@@ -9,6 +9,8 @@ import { todayISO } from "../utils/date.js";
 export interface FeePayload {
   id: string;
   studentId: string;
+  studentName?: string;
+  studentLoginId?: string;
   amount: number;
   dueDate: string;
   head?: string;
@@ -26,9 +28,13 @@ export async function calculateStudentFee(studentId: string, instituteId: string
 }
 
 function toPayload(f: { _id: unknown; amount: number; dueDate: string; head?: string; status: string; paidAt?: Date | null }): FeePayload {
+  const rawStudent = (f as { studentId?: unknown }).studentId;
+  const populated = (rawStudent !== null && typeof rawStudent === "object" ? (rawStudent as { _id?: unknown; name?: string; loginId?: string }) : null);
   return {
     id: String(f._id),
-    studentId: String((f as { studentId?: unknown }).studentId ?? ""),
+    studentId: String(populated?._id ?? rawStudent ?? ""),
+    studentName: populated?.name ?? undefined,
+    studentLoginId: populated?.loginId ?? undefined,
     amount: f.amount,
     dueDate: f.dueDate,
     head: f.head,
@@ -38,8 +44,35 @@ function toPayload(f: { _id: unknown; amount: number; dueDate: string; head?: st
   };
 }
 
+/** Flip past-due unpaid fees to overdue. Runs lazily on reads so lists,
+ * filters, and dues always reflect the due date. Paid rows are never touched.
+ * Each row transitions once; one system audit entry is written per row. */
+async function applyAutoOverdue(instituteId: string) {
+  const today = todayISO();
+  const stale = await Fee.find({
+    instituteId: new Types.ObjectId(instituteId),
+    status: { $nin: ["paid", "overdue"] },
+    dueDate: { $lt: today },
+  }).select("_id status");
+  if (!stale.length) return;
+  await Fee.updateMany(
+    { _id: { $in: stale.map((f) => f._id) } },
+    { $set: { status: "overdue", paidAt: null } },
+  );
+  await FeeAudit.insertMany(
+    stale.map((f) => ({
+      feeId: f._id,
+      instituteId: new Types.ObjectId(instituteId),
+      oldStatus: f.status,
+      newStatus: "overdue",
+      by: "system",
+    })),
+  );
+}
+
 /** Student read-only: own dues + history. Never another student's rows. */
 export async function myFees(studentId: string, instituteId: string) {
+  await applyAutoOverdue(instituteId);
   const rows = await Fee.find({
     instituteId: new Types.ObjectId(instituteId),
     studentId: new Types.ObjectId(studentId),
@@ -95,7 +128,8 @@ export async function listFees(
     filter.studentId = { $in: students.map((s) => s._id) };
   }
   if (query.status) filter.status = query.status;
-  const rows = await Fee.find(filter).sort({ dueDate: 1 }).limit(200);
+  await applyAutoOverdue(instituteId);
+  const rows = await Fee.find(filter).sort({ dueDate: 1 }).limit(200).populate("studentId", "name loginId").lean();
   // Teacher mirror: status only (amount hidden is a frontend rule; API keeps amount for receipts admin-side).
   // Student rows already scoped to self above.
   return rows.map((f) => toPayload(f as never));
@@ -120,7 +154,8 @@ export async function createFee(adminId: string, instituteId: string, input: { s
   return toPayload(fee as never);
 }
 
-/** Admin full update: amount/due edit, submitted->paid verify, revert. */
+/** Admin: amount/due edit + mark paid. Manual status changes are paid-only;
+ * overdue is applied automatically once the due date passes. */
 export async function updateFee(adminId: string, instituteId: string, feeId: string, input: { amount?: number; dueDate?: string; status?: string }) {
   assertObjectId(feeId);
   const fee = await Fee.findById(feeId);
@@ -130,27 +165,31 @@ export async function updateFee(adminId: string, instituteId: string, feeId: str
   if (input.amount !== undefined) fee.amount = input.amount;
   if (input.dueDate !== undefined) fee.dueDate = input.dueDate;
   if (input.status !== undefined) {
-    fee.status = input.status as never;
-    fee.paidAt = input.status === "paid" ? new Date() : null;
+    if (input.status !== "paid") throw ApiError.badRequest("Fee status can only be marked paid manually; overdue is applied automatically");
+    fee.status = "paid";
+    fee.paidAt = new Date();
   }
   await fee.save();
   await FeeAudit.create({ feeId: fee._id, instituteId: new Types.ObjectId(instituteId), oldStatus: old, newStatus: fee.status, by: new Types.ObjectId(adminId) });
   return toPayload(fee as never);
 }
 
-/** Teacher limited: pending -> submitted|collected + remark. Amount touch forbidden upstream. */
-export async function teacherFeeStatus(teacherId: string, instituteId: string, feeId: string, input: { status: "submitted" | "collected"; remark?: string }) {
+/** Teacher limited: any unpaid (pending|submitted|collected|overdue) -> paid + remark.
+ * Only teachers (own class) and admins can mark fees paid. Amount touch forbidden upstream. */
+export async function teacherFeeStatus(teacherId: string, instituteId: string, feeId: string, input: { status: "paid"; remark?: string }) {
   assertObjectId(feeId);
   const fee = await Fee.findById(feeId).populate("studentId");
   if (!fee) throw ApiError.notFound("Fee not found");
   if (String(fee.instituteId) !== instituteId) throw ApiError.forbidden("Cross-institute access denied");
-  if (fee.status !== "pending") throw ApiError.badRequest("Only pending fees can be marked submitted/collected");
+  if (fee.status === "paid") throw ApiError.badRequest("This fee is already paid");
+  if (!["pending", "submitted", "collected", "overdue"].includes(fee.status)) throw ApiError.badRequest("Only unpaid fees can be marked paid");
   const student = await User.findById(fee.studentId).select("classId");
   const { Class } = await import("../models/Class.js");
   const klass = student?.classId ? await Class.findById(student.classId).select("teacherId") : null;
   if (!klass || String(klass.teacherId ?? "") !== teacherId) throw ApiError.forbidden("Forbidden for this class");
   const old = fee.status;
-  fee.status = input.status;
+  fee.status = "paid";
+  fee.paidAt = new Date();
   await fee.save();
   await FeeAudit.create({
     feeId: fee._id,

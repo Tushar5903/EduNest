@@ -14,7 +14,6 @@ const TEACHER_NAV = [
   { href: "/teacher/tests", label: "Tests", icon: NotebookTabs },
   { href: "/teacher/results/publish", label: "Results", icon: BookOpen },
   { href: "/teacher/students/new", label: "Add Student", icon: CircleUserRound },
-  { href: "/teacher/promote", label: "Promote Students", icon: GraduationCap },
   { href: "/teacher/fees", label: "Fees", icon: ReceiptText },
   { href: "/teacher/salary", label: "Salary", icon: WalletCards },
   { href: "/teacher/notices", label: "Notices", icon: FileText },

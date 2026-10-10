@@ -20,19 +20,19 @@ export const listFeesQueryValidator = z.object({
   status: z.enum(["pending", "submitted", "collected", "paid", "overdue"]).optional(),
 });
 
-/** PATCH /api/fees/:id — admin full control (amount/due/verify). */
+/** PATCH /api/fees/:id — admin: amount/due edits + mark paid. Manual status is paid-only; overdue is auto-only. */
 export const updateFeeValidator = z
   .object({
     amount: z.number().min(0).optional(),
     dueDate: yyyymmdd.optional(),
-    status: z.enum(["pending", "submitted", "collected", "paid", "overdue"]).optional(),
+    status: z.enum(["paid"]).optional(),
   })
   .strict();
 
-/** PATCH /api/teacher/fees/:id/status — limited: pending -> submitted|collected + remark only. */
+/** PATCH /api/teacher/fees/:id/status — limited: any unpaid -> paid + remark only. */
 export const teacherFeeStatusValidator = z
   .object({
-    status: z.enum(["submitted", "collected"]),
+    status: z.enum(["paid"]),
     remark: z.string().trim().max(500).optional(),
   })
   .strict();
